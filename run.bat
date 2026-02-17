@@ -1,0 +1,3 @@
+@echo off
+echo Opening Ledger...
+start "" "%~dp0index.html"

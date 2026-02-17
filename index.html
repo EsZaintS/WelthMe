@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Ledger — บัญชีรับจ่าย</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f1117" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23111820'/%3E%3Cpath d='M50 20C50 20 35 20 25 25L25 70C35 66 50 68 50 68' fill='rgba(59,130,246,.15)' stroke='%233b82f6' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M50 20C50 20 65 20 75 25L75 70C65 66 50 68 50 68' fill='rgba(34,197,94,.15)' stroke='%2322c55e' stroke-width='3' stroke-linejoin='round'/%3E%3Cline x1='50' y1='20' x2='50' y2='68' stroke='%2394a3b8' stroke-width='2'/%3E%3Ctext x='50' y='88' text-anchor='middle' fill='%23f1f5f9' font-size='14' font-weight='600' font-family='system-ui'%3ELedger%3C/text%3E%3C/svg%3E" />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ledger" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <!-- Toast -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="shell">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+          </div>
+          <span class="brand-name">Ledger</span>
+        </div>
+        <nav class="tabs">
+          <button class="tab active" data-tab="dashboard">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Dashboard
+          </button>
+          <button class="tab" data-tab="ledger">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M8 10h8M8 14h4"/></svg>
+            บัญชีรับจ่าย
+          </button>
+          <button class="tab" data-tab="loans">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            เงินยืม
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="page active" id="page-dashboard">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <p class="page-sub">ภาพรวมการเงินของคุณ</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi green">
+            <div class="kpi-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+            <div class="kpi-body"><span class="kpi-label">รายรับรวม</span><span class="kpi-value" id="dashIncome">0.00</span></div>
+          </div>
+          <div class="kpi red">
+            <div class="kpi-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></div>
+            <div class="kpi-body"><span class="kpi-label">รายจ่ายรวม</span><span class="kpi-value" id="dashExpense">0.00</span></div>
+          </div>
+          <div class="kpi blue">
+            <div class="kpi-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+            <div class="kpi-body"><span class="kpi-label">ยอดคงเหลือ</span><span class="kpi-value" id="dashBalance">0.00</span></div>
+          </div>
+          <div class="kpi amber">
+            <div class="kpi-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+            <div class="kpi-body"><span class="kpi-label">เงินยืมค้างชำระ</span><span class="kpi-value" id="dashLoaned">0.00</span></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card"><div class="card-head"><h3>รายรับ vs รายจ่าย</h3></div><div class="chart-wrap"><canvas id="chartDonut"></canvas></div></div>
+          <div class="card"><div class="card-head"><h3>รายเดือน</h3></div><div class="chart-wrap"><canvas id="chartMonthly"></canvas></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>รายจ่ายตามหมวดหมู่</h3></div>
+          <div class="chart-wrap chart-wide"><canvas id="chartCategory"></canvas></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>ผลประกอบการเงินยืม</h3></div>
+          <div class="perf-row">
+            <div class="perf-item"><span class="perf-num" id="dashIntReceived">0.00</span><span class="perf-lbl">ดอกเบี้ยได้รับ</span></div>
+            <div class="perf-item"><span class="perf-num" id="dashIntPending">0.00</span><span class="perf-lbl">ดอกเบี้ยค้างรับ</span></div>
+            <div class="perf-item"><span class="perf-num" id="dashCollectRate">0%</span><span class="perf-lbl">อัตราเก็บ</span></div>
+            <div class="perf-item"><span class="perf-num" id="dashFc7">0.00</span><span class="perf-lbl">คาดการณ์ 7 วัน</span></div>
+            <div class="perf-item"><span class="perf-num" id="dashFc30">0.00</span><span class="perf-lbl">คาดการณ์ 30 วัน</span></div>
+          </div>
+          <div class="chart-wrap" style="margin-top:1rem"><canvas id="chartForecast"></canvas></div>
+        </div>
+      </section>
+
+      <!-- ===================== LEDGER ===================== -->
+      <section class="page" id="page-ledger">
+        <div class="page-header">
+          <h1>บัญชีรับจ่าย</h1>
+          <p class="page-sub">บันทึกรายรับ-รายจ่าย พร้อมยอดยกมา</p>
+        </div>
+
+        <div class="kpi-row kpi-row--3">
+          <div class="kpi green"><div class="kpi-body"><span class="kpi-label">รายรับรวม</span><span class="kpi-value" id="ledgerIncome">0.00</span></div></div>
+          <div class="kpi red"><div class="kpi-body"><span class="kpi-label">รายจ่ายรวม</span><span class="kpi-value" id="ledgerExpense">0.00</span></div></div>
+          <div class="kpi blue"><div class="kpi-body"><span class="kpi-label">ยอดคงเหลือ</span><span class="kpi-value" id="ledgerBalance">0.00</span></div></div>
+        </div>
+
+        <div class="inline-bar">
+          <label>ยอดยกมา</label>
+          <input type="number" id="openingBalance" placeholder="0.00" step="0.01" />
+          <button class="btn btn-sm" id="saveOpeningBtn">บันทึก</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 id="formTitle">เพิ่มรายการ</h3></div>
+          <form id="txForm" class="form-grid" autocomplete="off">
+            <div class="seg-control" id="typeSeg">
+              <button type="button" class="seg active" data-type="income">รายรับ</button>
+              <button type="button" class="seg" data-type="expense">รายจ่าย</button>
+            </div>
+            <div class="field"><label>จำนวนเงิน</label><input type="number" id="txAmount" placeholder="0.00" min="0" step="0.01" required /></div>
+            <div class="field"><label>หมวดหมู่</label><select id="txCategory"><option value="">เลือก</option></select></div>
+            <div class="field"><label>รายละเอียด</label><input type="text" id="txDesc" placeholder="เช่น ค่ากาแฟ" /></div>
+            <div class="field"><label>วันที่</label><input type="date" id="txDate" required /></div>
+            <div class="field field-actions">
+              <button type="submit" class="btn btn-green">บันทึก</button>
+              <button type="button" class="btn btn-ghost" id="cancelTxBtn" style="display:none">ยกเลิก</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>รายการ</h3>
+            <div class="filter-row">
+              <select id="filterType"><option value="all">ทั้งหมด</option><option value="income">รายรับ</option><option value="expense">รายจ่าย</option></select>
+              <select id="filterCat"><option value="">ทุกหมวด</option></select>
+            </div>
+          </div>
+          <div class="tx-list" id="txList"></div>
+        </div>
+      </section>
+
+      <!-- ===================== LOANS ===================== -->
+      <section class="page" id="page-loans">
+        <div class="page-header">
+          <h1>เงินยืม</h1>
+          <p class="page-sub">จัดการเงินที่เพื่อนยืม พร้อมคำนวณดอกเบี้ย</p>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ค้างชำระรวม</span><span class="kpi-value" id="loanOwed">0.00</span></div></div>
+          <div class="kpi green"><div class="kpi-body"><span class="kpi-label">ดอกเบี้ยรวม</span><span class="kpi-value" id="loanTotalInt">0.00</span></div></div>
+          <div class="kpi"><div class="kpi-body"><span class="kpi-label">รายการ</span><span class="kpi-value" id="loanCount">0</span></div></div>
+          <div class="kpi"><div class="kpi-body"><span class="kpi-label">ผู้ยืม</span><span class="kpi-value" id="loanPeople">0</span></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>สรุปตามผู้ยืม</h3></div>
+          <div class="table-scroll">
+            <table class="tbl" id="borrowerTable">
+              <thead><tr><th>ชื่อ</th><th>รายการ</th><th>วัน</th><th>เงินต้น</th><th>ชำระแล้ว</th><th>ค้าง</th><th>ดอกเบี้ยรวม</th><th>รวมทั้งหมด</th></tr></thead>
+              <tbody id="borrowerBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 id="loanFormTitle">เพิ่มเงินยืม</h3></div>
+          <form id="loanForm" class="form-grid" autocomplete="off">
+            <div class="field"><label>ชื่อผู้ยืม</label><input type="text" id="lnBorrower" list="borrowerList" placeholder="ชื่อเพื่อน" required /><datalist id="borrowerList"></datalist></div>
+            <div class="field"><label>จำนวนเงิน</label><input type="number" id="lnAmount" placeholder="0.00" min="0" step="0.01" required /></div>
+            <div class="field"><label>วันที่ให้ยืม</label><input type="date" id="lnDate" required /></div>
+            <div class="field">
+              <label>ประเภทดอกเบี้ย</label>
+              <select id="lnIntType">
+                <option value="daily">% ต่อวัน</option>
+                <option value="weekly">% ต่อสัปดาห์</option>
+                <option value="fixed">บาท/วัน (คงที่)</option>
+                <option value="fixedWeekly">บาท/สัปดาห์ (คงที่)</option>
+              </select>
+            </div>
+            <div class="field" id="grpRate"><label>อัตรา (%)</label><input type="number" id="lnRate" placeholder="0.1" min="0" step="0.01" /></div>
+            <div class="field" id="grpFixed" style="display:none"><label>บาท/วัน</label><input type="number" id="lnFixed" placeholder="100" min="0" step="0.01" /></div>
+            <div class="field" id="grpFixedWeekly" style="display:none"><label>บาท/สัปดาห์</label><input type="number" id="lnFixedWeekly" placeholder="500" min="0" step="0.01" /></div>
+            <div class="field span-full"><label>หมายเหตุ</label><input type="text" id="lnNote" placeholder="เช่น ยืมไปซื้อของ" /></div>
+            <div class="field field-actions">
+              <button type="submit" class="btn btn-amber">บันทึกเงินยืม</button>
+              <button type="button" class="btn btn-ghost" id="cancelLnBtn" style="display:none">ยกเลิก</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>รายการเงินยืม</h3></div>
+          <div class="loan-list" id="loanList"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footer"><small>ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของคุณ</small></footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>
