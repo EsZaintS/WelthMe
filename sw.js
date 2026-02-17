@@ -1,4 +1,4 @@
-const CACHE = "ledger-v1";
+const CACHE = "ledger-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,15 +23,12 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const fetched = fetch(e.request).then(res => {
-        if (res && res.status === 200) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || fetched;
-    })
+    fetch(e.request).then(res => {
+      if (res && res.status === 200) {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });

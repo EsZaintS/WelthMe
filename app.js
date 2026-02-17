@@ -703,13 +703,31 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+function forceUpdate() {
+  if (!("serviceWorker" in navigator)) { location.reload(true); return; }
+  navigator.serviceWorker.getRegistration().then(reg => {
+    if (reg) {
+      reg.unregister().then(() => {
+        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
+          toast("ล้าง cache แล้ว กำลังโหลดใหม่...");
+          setTimeout(() => location.reload(true), 500);
+        });
+      });
+    } else {
+      location.reload(true);
+    }
+  });
+}
+
 function setupDataActions() {
   const expBtn = $("#exportBtn");
   const impBtn = $("#importBtn");
   const impFile = $("#importFile");
+  const updBtn = $("#updateBtn");
   if (expBtn) expBtn.addEventListener("click", exportData);
   if (impBtn) impBtn.addEventListener("click", () => impFile && impFile.click());
   if (impFile) impFile.addEventListener("change", (e) => { importData(e.target.files[0]); e.target.value = ""; });
+  if (updBtn) updBtn.addEventListener("click", forceUpdate);
 }
 
 // ── Boot ──
