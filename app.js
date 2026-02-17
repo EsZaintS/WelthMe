@@ -660,9 +660,61 @@ function generateIcons() {
   });
 }
 
+// ── Export / Import ──
+function exportData() {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    transactions: S.tx,
+    loans: S.loans,
+    openingBalance: S.openBal
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ledger-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("Export สำเร็จ");
+}
+
+function importData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.transactions && !data.loans) throw new Error("invalid");
+      const txCount = (data.transactions || []).length;
+      const loanCount = (data.loans || []).length;
+      if (!confirm(`นำเข้าข้อมูล:\n• รายการรับจ่าย ${txCount} รายการ\n• เงินยืม ${loanCount} รายการ\n• ยอดยกมา ${(data.openingBalance || 0).toLocaleString()} บาท\n\nข้อมูลเดิมจะถูกแทนที่ ต้องการดำเนินการ?`)) return;
+      S.tx = data.transactions || [];
+      S.loans = data.loans || [];
+      S.openBal = Number(data.openingBalance) || 0;
+      save();
+      renderLedger(); renderLoans(); updateCharts();
+      const ob = $("#openBal"); if (ob) ob.value = S.openBal || "";
+      toast("Import สำเร็จ");
+    } catch (err) {
+      toast("ไฟล์ไม่ถูกต้อง กรุณาใช้ไฟล์ที่ Export จากระบบ", "error");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function setupDataActions() {
+  const expBtn = $("#exportBtn");
+  const impBtn = $("#importBtn");
+  const impFile = $("#importFile");
+  if (expBtn) expBtn.addEventListener("click", exportData);
+  if (impBtn) impBtn.addEventListener("click", () => impFile && impFile.click());
+  if (impFile) impFile.addEventListener("change", (e) => { importData(e.target.files[0]); e.target.value = ""; });
+}
+
 // ── Boot ──
 function init() {
-  load(); setupNav(); setupOpenBal(); setupTxForm(); setupLoanForm(); setupFilters(); initCharts(); renderLedger(); renderLoans(); updateCharts();
+  load(); setupNav(); setupOpenBal(); setupTxForm(); setupLoanForm(); setupFilters(); setupDataActions(); initCharts(); renderLedger(); renderLoans(); updateCharts();
   generateIcons();
 }
 init();

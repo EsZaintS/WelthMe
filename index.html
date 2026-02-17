@@ -212,7 +212,14 @@
 
     </main>
 
-    <footer class="footer"><small>ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของคุณ</small></footer>
+    <footer class="footer">
+      <div class="data-actions">
+        <button class="btn btn-sm" id="exportBtn" title="Export ข้อมูล">📤 Export ข้อมูล</button>
+        <button class="btn btn-sm" id="importBtn" title="Import ข้อมูล">📥 Import ข้อมูล</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" />
+      </div>
+      <small>ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของคุณ</small>
+    </footer>
   </div>
 
   <script src="app.js"></script>
