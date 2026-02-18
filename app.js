@@ -682,27 +682,33 @@ function toggleWeekInt(loanId, weekStart) {
 
 function collectDayInt(loanId, dateStr) {
   const loan = S.loans.find(l => l.id === loanId);
-  if (!loan || loan.interestType !== "fixed") return;
+  if (!loan || loan.interestType !== "fixed") { toast("ไม่พบรายการ","error"); return; }
   loan.interestDailyRecords = loan.interestDailyRecords || [];
   const rec = loan.interestDailyRecords.find(r => r.date === dateStr);
-  if (rec) { if (rec.received) return; rec.received = true; }
+  if (rec) { if (rec.received) { toast("เก็บแล้ว","info"); return; } rec.received = true; }
   else loan.interestDailyRecords.push({ date: dateStr, received: true });
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
-  save(); renderLoans(); renderAgent(); updateCharts();
+  save();
+  try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
+  try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
+  try { updateCharts(); } catch(e) { console.error("updateCharts:", e); }
   toast(`เก็บดอกแล้ว — คอม ${fmtMoney(com)} · โอน ${fmtMoney(rate)}`);
 }
 
 function collectWeekInt(loanId, weekStart) {
   const loan = S.loans.find(l => l.id === loanId);
-  if (!loan || loan.interestType !== "fixedWeekly") return;
+  if (!loan || loan.interestType !== "fixedWeekly") { toast("ไม่พบรายการ","error"); return; }
   loan.interestWeeklyRecords = loan.interestWeeklyRecords || [];
   const rec = loan.interestWeeklyRecords.find(r => r.weekStart === weekStart);
-  if (rec) { if (rec.received) return; rec.received = true; }
+  if (rec) { if (rec.received) { toast("เก็บแล้ว","info"); return; } rec.received = true; }
   else loan.interestWeeklyRecords.push({ weekStart, received: true });
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
-  save(); renderLoans(); renderAgent(); updateCharts();
+  save();
+  try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
+  try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
+  try { updateCharts(); } catch(e) { console.error("updateCharts:", e); }
   toast(`เก็บดอกแล้ว — คอม ${fmtMoney(com)} · โอน ${fmtMoney(rate)}`);
 }
 
@@ -921,6 +927,7 @@ function autoCollectAndTransfer(loanId, dateOrWeek, isWeekly) {
 }
 
 function renderAgent() {
+ try {
   const todayList = $("#agentTodayList");
   const overdueList = $("#agentOverdueList");
   const invBody = $("#investorSummaryBody");
@@ -993,6 +1000,7 @@ function renderAgent() {
     }
   });
   overdueSection.forEach(i => { totalOverdue += i.intAmt; });
+  console.log("[renderAgent]", { todayCount: todaySection.length, overdueCount: overdueSection.length, intToday, comToday, transferToday, totalOverdue, todayItems: todaySection.map(i => ({ borrower: i.loan.borrowerName, date: i.date, collected: i.collected, isOverdue: i.isOverdue })) });
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
   setText("#agentTransferToday", fmtMoney(transferToday));
@@ -1040,7 +1048,10 @@ function renderAgent() {
         </div>`;
       }).join("");
 
+      const todayItemCount = todaySection.length;
+      const collectedOverdue = todaySection.filter(i => i.isOverdue && i.collected).length;
       const totalSummary = `<div class="agent-today-total">
+        <div class="agent-total-row"><span>รายการทั้งหมด</span><strong>${todayItemCount} รายการ${collectedOverdue > 0 ? ` (ค้าง ${collectedOverdue})` : ""}</strong></div>
         <div class="agent-total-row"><span>ดอกเบี้ยที่เก็บได้</span><strong>${fmtMoney(intToday)}</strong></div>
         <div class="agent-total-row"><span>คอมฯ นายหน้า</span><strong class="com">${fmtMoney(comToday)}</strong></div>
         <div class="agent-total-row"><span>ต้องโอน Investor</span><strong class="transfer">${fmtMoney(transferToday)}</strong></div>
@@ -1125,6 +1136,7 @@ function renderAgent() {
         </tr>`).join("");
     }
   }
+ } catch(err) { console.error("renderAgent error:", err); toast("Agent error: " + err.message, "error"); }
 }
 
 // ── Generate PWA icons from canvas ──
