@@ -1011,7 +1011,10 @@ function renderAgent() {
     const dbgType = dbgLoan ? dbgLoan.interestType : "?";
     const dbgRec = dbgLoan ? (dbgLoan.interestDailyRecords||[]).find(r => r.date === _debugDate) : null;
     const dbgInList = invLoans.some(l => l.id === _debugLid);
-    alert(`[DEBUG]\ntodaySection: ${todaySection.length}\noverdueCollected: ${todaySection.filter(i=>i.isOverdue&&i.collected).length}\noverdueLeft: ${overdueSection.length}\n---\nloanId: ${_debugLid}\ndate: ${_debugDate}\ninvestor: ${dbgInv}\ntype: ${dbgType}\nrecord: ${JSON.stringify(dbgRec)}\ninInvLoans: ${dbgInList}\ntoday: ${today}`);
+    const dbgText = JSON.stringify({todaySection:todaySection.length,overdueCollected:todaySection.filter(i=>i.isOverdue&&i.collected).length,overdueLeft:overdueSection.length,loanId:_debugLid,date:_debugDate,investor:dbgInv,type:dbgType,record:dbgRec,inInvLoans:dbgInList,today}, null, 2);
+    const w = window.open("", "debug", "width=500,height=400");
+    if (w) { w.document.write(`<pre style="font:14px monospace;padding:16px;background:#111;color:#0f0;word-wrap:break-word">${dbgText}</pre>`); w.document.title = "Debug"; }
+    else prompt("Copy debug info:", dbgText);
   }
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
