@@ -38,7 +38,7 @@ function toast(msg, type = "success") {
 // ── Storage ──
 function load() {
   try { S.tx = JSON.parse(localStorage.getItem(KEYS.tx)) || []; } catch { S.tx = []; }
-  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; if (!l.investorTransfers) l.investorTransfers = []; if (l.investor === undefined) l.investor = ""; if (l.investorRate === undefined) l.investorRate = 0; }); } catch { S.loans = []; }
+  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; if (!l.investorTransfers) l.investorTransfers = []; if (l.investor === undefined) l.investor = ""; }); } catch { S.loans = []; }
   try { S.openBal = parseFloat(localStorage.getItem(KEYS.opening)) || 0; } catch { S.openBal = 0; }
 }
 function save() {
@@ -349,6 +349,13 @@ function calcCom(loan, daysT, weeksT) {
   return { comRcv: 0, comUnp: 0, comTotal: 0, perCom: 0, comDaysR: 0, comWeeksR: 0 };
 }
 
+function calcInvestorRate(loan) {
+  if (!(loan.investor || "").trim()) return 0;
+  const interest = loan.interestType === "fixedWeekly" ? (Number(loan.interestFixedWeekly) || 0) : (Number(loan.interestFixed) || 0);
+  const com = Number(loan.commission) || 0;
+  return Math.max(0, interest - com);
+}
+
 function calcInt(loan) {
   const principal = loan.amount;
   const paid = (loan.payments || []).reduce((s, p) => s + p.amount, 0);
@@ -514,23 +521,15 @@ function setupLoanForm() {
   fillBorrowerList();
   fillInvestorList();
   const sel = $("#lnIntType");
-  function updateLoanFieldVisibility() {
+  if (sel) sel.addEventListener("change", () => {
     const v = sel.value;
-    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission"), gi = $("#grpInvRate");
+    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
     if (gr) gr.style.display = (v === "daily" || v === "weekly") ? "flex" : "none";
     if (gf) gf.style.display = v === "fixed" ? "flex" : "none";
     if (gfw) gfw.style.display = v === "fixedWeekly" ? "flex" : "none";
     if (gc) gc.style.display = (v === "fixed" || v === "fixedWeekly") ? "flex" : "none";
     const pl = $("#comPeriodLabel"); if (pl) pl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
-    const hasInvestor = ($("#lnInvestor").value || "").trim() !== "";
-    const isFixed = (v === "fixed" || v === "fixedWeekly");
-    if (gi) gi.style.display = (hasInvestor && isFixed) ? "flex" : "none";
-    const ip = $("#invPeriodLabel"); if (ip) ip.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
-  }
-  if (sel) sel.addEventListener("change", updateLoanFieldVisibility);
-  const invInp = $("#lnInvestor");
-  if (invInp) invInp.addEventListener("input", updateLoanFieldVisibility);
-  if (invInp) invInp.addEventListener("blur", () => setTimeout(updateLoanFieldVisibility, 200));
+  });
   const d = $("#lnDate"); if (d) d.value = todayStr();
 }
 
@@ -548,10 +547,9 @@ function handleLoanSubmit(e) {
   if (!borrower || !amount || amount <= 0) return toast("กรุณากรอกชื่อและจำนวนเงิน", "error");
 
   const investor = ($("#lnInvestor").value || "").trim();
-  const investorRate = parseFloat($("#lnInvRate").value) || 0;
 
   const existing = S.editLoan ? S.loans.find(l => l.id === S.editLoan) : null;
-  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, commission, investor, investorRate, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], commissionDailyRecords: existing?.commissionDailyRecords || [], commissionWeeklyRecords: existing?.commissionWeeklyRecords || [], investorTransfers: existing?.investorTransfers || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
+  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, commission, investor, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], commissionDailyRecords: existing?.commissionDailyRecords || [], commissionWeeklyRecords: existing?.commissionWeeklyRecords || [], investorTransfers: existing?.investorTransfers || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
 
   if (S.editLoan) { const idx = S.loans.findIndex(l => l.id === S.editLoan); if (idx >= 0) S.loans[idx] = loan; cancelLoanEdit(); toast("แก้ไขเงินยืมแล้ว"); }
   else { S.loans.push(loan); toast("บันทึกเงินยืมแล้ว"); }
@@ -584,12 +582,6 @@ function editLoan(id) {
   if (v === "fixedWeekly") { $("#lnFixedWeekly").value = l.interestFixedWeekly || ""; }
   $("#lnCommission").value = l.commission || "";
   $("#lnInvestor").value = l.investor || "";
-  $("#lnInvRate").value = l.investorRate || "";
-  const gi = $("#grpInvRate");
-  const hasInv = (l.investor || "").trim() !== "";
-  const isFixed = (v === "fixed" || v === "fixedWeekly");
-  if (gi) gi.style.display = (hasInv && isFixed) ? "flex" : "none";
-  const ip = $("#invPeriodLabel"); if (ip) ip.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
 
   $("#cancelLnBtn").style.display = "inline-flex";
   $("#loanFormTitle").textContent = "แก้ไขเงินยืม";
@@ -604,12 +596,11 @@ function cancelLoanEdit() {
   const btn = $("#cancelLnBtn"); if (btn) btn.style.display = "none";
   const title = $("#loanFormTitle"); if (title) title.textContent = "เพิ่มเงินยืม";
   $("#loanForm").reset(); $("#lnDate").value = todayStr();
-  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission"), gi = $("#grpInvRate");
+  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
   if (gr) gr.style.display = "flex";
   if (gf) gf.style.display = "none";
   if (gfw) gfw.style.display = "none";
   if (gc) gc.style.display = "none";
-  if (gi) gi.style.display = "none";
 }
 
 function addPayment(loanId, amtStr) {
@@ -728,7 +719,8 @@ function renderLoans() {
       const comPer = loan.interestType === "fixedWeekly" ? "/สป." : "/วัน";
       rateStr += ` · คอม ${fmtMoney(loan.commission)}${comPer}`;
     }
-    const investorStr = (loan.investor || "").trim() ? ` · ทุน: ${esc(loan.investor)}` + (loan.investorRate ? ` (จ่าย ${fmtMoney(loan.investorRate)}${loan.interestType === "fixedWeekly" ? "/สป." : "/วัน"})` : "") : "";
+    const invRate = calcInvestorRate(loan);
+    const investorStr = (loan.investor || "").trim() ? ` · ทุน: ${esc(loan.investor)}` + (invRate > 0 ? ` (โอน Investor ${fmtMoney(invRate)}${loan.interestType === "fixedWeekly" ? "/สป." : "/วัน"})` : "") : "";
 
     // Interest + Commission summary badge
     const hasInterest = (c.intRcv > 0 || c.interest > 0 || c.intTotal > 0);
@@ -862,7 +854,7 @@ function confirmInvestorTransfer(loanId, dateOrWeek) {
   loan.investorTransfers = loan.investorTransfers || [];
   const existing = loan.investorTransfers.find(t => t.date === dateOrWeek);
   if (existing) { existing.confirmed = !existing.confirmed; }
-  else { loan.investorTransfers.push({ date: dateOrWeek, amount: loan.investorRate || 0, confirmed: true }); }
+  else { loan.investorTransfers.push({ date: dateOrWeek, amount: calcInvestorRate(loan), confirmed: true }); }
   save(); renderAgent();
 }
 
@@ -881,7 +873,7 @@ function renderAgent() {
 
   invLoans.forEach(loan => {
     const inv = (loan.investor || "").trim();
-    const rate = Number(loan.investorRate) || 0;
+    const rate = calcInvestorRate(loan);
     if (!inv || rate <= 0) return;
 
     if (!investorTotals[inv]) investorTotals[inv] = { count: 0, transferred: 0, overdue: 0, total: 0 };
