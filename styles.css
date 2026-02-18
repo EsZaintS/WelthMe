@@ -236,6 +236,27 @@ body {
   font-weight: 600;
   letter-spacing: -.01em;
 }
+.card-head-badge {
+  font-family: var(--mono);
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .2rem .6rem;
+  border-radius: 6px;
+  background: var(--green-soft);
+  color: var(--green);
+  transition: all .3s ease;
+  animation: badgePulse .5s ease;
+}
+.card-head-badge:empty { display: none; }
+.card-head-badge.overdue {
+  background: var(--red-soft);
+  color: var(--red);
+}
+@keyframes badgePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
 
 .grid-2 {
   display: grid;

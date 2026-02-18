@@ -680,6 +680,32 @@ function toggleWeekInt(loanId, weekStart) {
   save(); renderLoans(); renderAgent(); updateCharts();
 }
 
+function collectDayInt(loanId, dateStr) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan || loan.interestType !== "fixed") return;
+  loan.interestDailyRecords = loan.interestDailyRecords || [];
+  const rec = loan.interestDailyRecords.find(r => r.date === dateStr);
+  if (rec) { if (rec.received) return; rec.received = true; }
+  else loan.interestDailyRecords.push({ date: dateStr, received: true });
+  const com = Number(loan.commission) || 0;
+  const rate = calcInvestorRate(loan);
+  save(); renderLoans(); renderAgent(); updateCharts();
+  toast(`เก็บดอกแล้ว — คอม ${fmtMoney(com)} · โอน ${fmtMoney(rate)}`);
+}
+
+function collectWeekInt(loanId, weekStart) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan || loan.interestType !== "fixedWeekly") return;
+  loan.interestWeeklyRecords = loan.interestWeeklyRecords || [];
+  const rec = loan.interestWeeklyRecords.find(r => r.weekStart === weekStart);
+  if (rec) { if (rec.received) return; rec.received = true; }
+  else loan.interestWeeklyRecords.push({ weekStart, received: true });
+  const com = Number(loan.commission) || 0;
+  const rate = calcInvestorRate(loan);
+  save(); renderLoans(); renderAgent(); updateCharts();
+  toast(`เก็บดอกแล้ว — คอม ${fmtMoney(com)} · โอน ${fmtMoney(rate)}`);
+}
+
 
 // ── Loan Render ──
 function renderLoans() {
@@ -947,6 +973,11 @@ function renderAgent() {
   setText("#agentTransferToday", fmtMoney(transferToday));
   setText("#agentOverdue", fmtMoney(totalOverdue));
 
+  const todayBadge = $("#agentTodayBadge");
+  if (todayBadge) todayBadge.textContent = transferToday > 0 ? `โอน ${fmtMoney(transferToday)}` : "";
+  const overdueBadge = $("#agentOverdueBadge");
+  if (overdueBadge) overdueBadge.textContent = totalOverdue > 0 ? `ค้าง ${fmtMoney(totalOverdue)}` : "";
+
   // Today's section grouped by investor
   const todayByInv = {};
   todaySection.forEach(i => {
@@ -997,9 +1028,11 @@ function renderAgent() {
 
       todayList.innerHTML = groupsHtml + totalSummary;
       todayList.querySelectorAll(".agent-collect-btn").forEach(b => {
-        b.addEventListener("click", () => {
-          if (b.dataset.weekly === "true") toggleWeekInt(b.dataset.lid, b.dataset.d);
-          else toggleDayInt(b.dataset.lid, b.dataset.d);
+        b.addEventListener("click", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          b.disabled = true;
+          if (b.dataset.weekly === "true") collectWeekInt(b.dataset.lid, b.dataset.d);
+          else collectDayInt(b.dataset.lid, b.dataset.d);
         });
       });
       todayList.querySelectorAll(".agent-transfer-btn").forEach(b => {
@@ -1050,9 +1083,11 @@ function renderAgent() {
         </div>`;
       }).join("");
       overdueList.querySelectorAll(".agent-collect-btn").forEach(b => {
-        b.addEventListener("click", () => {
-          if (b.dataset.weekly === "true") toggleWeekInt(b.dataset.lid, b.dataset.d);
-          else toggleDayInt(b.dataset.lid, b.dataset.d);
+        b.addEventListener("click", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          b.disabled = true;
+          if (b.dataset.weekly === "true") collectWeekInt(b.dataset.lid, b.dataset.d);
+          else collectDayInt(b.dataset.lid, b.dataset.d);
         });
       });
     }
