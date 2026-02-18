@@ -809,9 +809,10 @@ body {
 .agent-detail { font-family: var(--mono); font-size: .72rem; color: var(--t3); white-space: nowrap; }
 .agent-status { font-size: .72rem; font-weight: 600; padding: .15rem .45rem; border-radius: 4px; white-space: nowrap; }
 
-.agent-row.confirmed .agent-status { color: var(--green); background: var(--green-soft); }
-.agent-row.pending .agent-status { color: var(--amber); background: var(--amber-soft); }
-.agent-row.not-collected .agent-status { color: var(--red); background: var(--red-soft); }
+.agent-row.transferred .agent-status { color: var(--green); background: var(--green-soft); }
+.agent-row.confirmed .agent-status { color: var(--amber); background: var(--amber-soft); }
+.agent-row.pending .agent-status { color: var(--red); background: var(--red-soft); }
+.agent-row.transferred { background: rgba(34,197,94,.03); }
 
 .agent-row.overdue-row {
   background: rgba(239,68,68,.04);

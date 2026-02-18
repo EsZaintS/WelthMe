@@ -857,6 +857,19 @@ function getInvestorLoans() {
   return S.loans.filter(l => (l.investor || "").trim() && calcInt(l).remain > 0);
 }
 
+function isTransferred(loan, dateOrWeek) {
+  return (loan.investorTransfers || []).some(t => t.date === dateOrWeek && t.confirmed);
+}
+
+function confirmTransfer(loanId, dateOrWeek) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  loan.investorTransfers = loan.investorTransfers || [];
+  const existing = loan.investorTransfers.find(t => t.date === dateOrWeek);
+  if (existing) { existing.confirmed = !existing.confirmed; }
+  else { loan.investorTransfers.push({ date: dateOrWeek, confirmed: true }); }
+  save(); renderAgent(); renderLoans();
+}
 
 function renderAgent() {
   const todayList = $("#agentTodayList");
@@ -867,8 +880,8 @@ function renderAgent() {
   const today = todayStr();
   const invLoans = getInvestorLoans();
 
-  const todayItems = [];
-  const overdueItems = [];
+  const todaySection = [];
+  const overdueSection = [];
   const investorTotals = {};
 
   invLoans.forEach(loan => {
@@ -878,107 +891,99 @@ function renderAgent() {
     const intAmt = loan.interestType === "fixedWeekly" ? (Number(loan.interestFixedWeekly) || 0) : (Number(loan.interestFixed) || 0);
     if (!inv) return;
 
-    if (!investorTotals[inv]) investorTotals[inv] = { count: 0, transferred: 0, overdue: 0, total: 0 };
+    if (!investorTotals[inv]) investorTotals[inv] = { count: 0, transferred: 0, pending: 0, overdue: 0, total: 0 };
+
+    const processPeriod = (dateKey, isToday, isPast, isWeekly) => {
+      const collected = isWeekly
+        ? (loan.interestWeeklyRecords || []).some(r => r.weekStart === dateKey && r.received)
+        : (loan.interestDailyRecords || []).some(r => r.date === dateKey && r.received);
+      const transferred = collected && isTransferred(loan, dateKey);
+      const item = { loan, investor: inv, date: dateKey, intAmt, com, rate, collected, transferred, isWeekly };
+
+      investorTotals[inv].count++;
+      investorTotals[inv].total += rate;
+
+      if (isToday) {
+        todaySection.push(item);
+        if (transferred) investorTotals[inv].transferred += rate;
+        else if (collected) investorTotals[inv].pending += rate;
+        else investorTotals[inv].overdue += rate;
+      } else if (isPast) {
+        if (collected && !transferred) {
+          todaySection.push(item);
+          investorTotals[inv].pending += rate;
+        } else if (collected && transferred) {
+          investorTotals[inv].transferred += rate;
+        } else {
+          overdueSection.push(item);
+          investorTotals[inv].overdue += rate;
+        }
+      }
+    };
 
     if (loan.interestType === "fixed") {
-      const intRecs = loan.interestDailyRecords || [];
-      const intMap = {}; intRecs.forEach(r => { intMap[r.date] = r.received; });
       const startDay = nextDay(loan.date);
       const allDays = startDay <= today ? dateRange(startDay, today) : [];
-
-      allDays.forEach(d => {
-        const collected = !!intMap[d];
-        investorTotals[inv].count++;
-        investorTotals[inv].total += rate;
-
-        if (d === today) {
-          todayItems.push({ loan, investor: inv, date: d, intAmt, com, rate, collected });
-          if (collected) investorTotals[inv].transferred += rate;
-        } else {
-          if (collected) {
-            investorTotals[inv].transferred += rate;
-          } else {
-            investorTotals[inv].overdue += rate;
-            overdueItems.push({ loan, investor: inv, date: d, intAmt, com, rate });
-          }
-        }
-      });
+      allDays.forEach(d => processPeriod(d, d === today, d < today, false));
     } else if (loan.interestType === "fixedWeekly") {
-      const intRecs = loan.interestWeeklyRecords || [];
-      const intMap = {}; intRecs.forEach(r => { intMap[r.weekStart] = r.received; });
       const startDay = nextDay(loan.date);
       const endW = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
       const weeks = startDay <= endW ? weekStarts(startDay, endW) : [];
-
       weeks.forEach(w => {
-        const collected = !!intMap[w];
         const wEnd = (() => { const d = new Date(w); d.setDate(d.getDate() + 6); return localDateStr(d); })();
-        const isCurrent = w <= today && wEnd >= today;
-        const isPast = wEnd < today;
-
-        investorTotals[inv].count++;
-        investorTotals[inv].total += rate;
-
-        if (isCurrent) {
-          todayItems.push({ loan, investor: inv, date: w, intAmt, com, rate, collected, isWeekly: true });
-          if (collected) investorTotals[inv].transferred += rate;
-        } else if (isPast) {
-          if (collected) {
-            investorTotals[inv].transferred += rate;
-          } else {
-            investorTotals[inv].overdue += rate;
-            overdueItems.push({ loan, investor: inv, date: w, intAmt, com, rate, isWeekly: true });
-          }
-        }
+        processPeriod(w, w <= today && wEnd >= today, wEnd < today, true);
       });
     }
   });
 
-  // KPIs
+  // KPIs: include all collected items in todaySection
   let intToday = 0, comToday = 0, transferToday = 0, totalOverdue = 0;
-  todayItems.forEach(i => {
-    intToday += i.intAmt;
-    if (i.collected) { comToday += i.com; transferToday += i.rate; }
+  todaySection.forEach(i => {
+    if (i.collected) { intToday += i.intAmt; comToday += i.com; transferToday += i.rate; }
   });
-  overdueItems.forEach(i => { totalOverdue += i.intAmt; });
+  overdueSection.forEach(i => { totalOverdue += i.intAmt; });
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
   setText("#agentTransferToday", fmtMoney(transferToday));
   setText("#agentOverdue", fmtMoney(totalOverdue));
 
-  // Today's list grouped by investor
+  // Today's section grouped by investor
   const todayByInv = {};
-  todayItems.forEach(i => {
+  todaySection.forEach(i => {
     if (!todayByInv[i.investor]) todayByInv[i.investor] = [];
     todayByInv[i.investor].push(i);
   });
 
   if (todayList) {
-    if (todayItems.length === 0) {
+    if (todaySection.length === 0) {
       todayList.innerHTML = '<div class="empty-state"><p>ไม่มีรายการวันนี้</p></div>';
     } else {
       todayList.innerHTML = Object.entries(todayByInv).map(([inv, items]) => {
-        const invTotal = items.reduce((s, i) => s + i.intAmt, 0);
-        const invCollected = items.filter(i => i.collected);
-        const invComTotal = invCollected.reduce((s, i) => s + i.com, 0);
-        const invTransTotal = invCollected.reduce((s, i) => s + i.rate, 0);
+        const collected = items.filter(i => i.collected);
+        const invComTotal = collected.reduce((s, i) => s + i.com, 0);
+        const invTransTotal = collected.reduce((s, i) => s + i.rate, 0);
         const rows = items.map(i => {
           const dateLabel = i.isWeekly
             ? `สป. ${new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"})}`
             : new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-          return `<div class="agent-row ${i.collected ? "confirmed" : "pending"}">
+          let actionHtml;
+          if (!i.collected) {
+            actionHtml = `<button class="btn btn-sm btn-green agent-collect-btn" data-lid="${i.loan.id}" data-d="${i.date}" data-weekly="${!!i.isWeekly}">เก็บดอก</button>`;
+          } else if (!i.transferred) {
+            actionHtml = `<button class="btn btn-sm btn-amber agent-transfer-btn" data-lid="${i.loan.id}" data-d="${i.date}">โอนแล้ว</button>`;
+          } else {
+            actionHtml = `<span class="agent-status confirmed">✓ โอนแล้ว</span>`;
+          }
+          return `<div class="agent-row ${i.transferred ? "transferred" : (i.collected ? "confirmed" : "pending")}">
             <span class="agent-borrower">${esc(i.loan.borrowerName)}</span>
             <span class="agent-date">${dateLabel}</span>
             <span class="agent-amount">ดอก ${fmtMoney(i.intAmt)}</span>
             <span class="agent-detail">คอม ${fmtMoney(i.com)} · โอน ${fmtMoney(i.rate)}</span>
-            ${i.collected
-              ? `<span class="agent-status">✓ เก็บแล้ว</span>`
-              : `<button class="btn btn-sm btn-green agent-collect-btn" data-lid="${i.loan.id}" data-d="${i.date}" data-weekly="${!!i.isWeekly}">เก็บดอก</button>`
-            }
+            ${actionHtml}
           </div>`;
         }).join("");
         return `<div class="agent-group">
-          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total">ดอก ${fmtMoney(invTotal)} · คอม ${fmtMoney(invComTotal)} · โอน ${fmtMoney(invTransTotal)}</span></div>
+          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total">คอม ${fmtMoney(invComTotal)} · โอน ${fmtMoney(invTransTotal)}</span></div>
           ${rows}
         </div>`;
       }).join("");
@@ -988,18 +993,21 @@ function renderAgent() {
           else toggleDayInt(b.dataset.lid, b.dataset.d);
         });
       });
+      todayList.querySelectorAll(".agent-transfer-btn").forEach(b => {
+        b.addEventListener("click", () => confirmTransfer(b.dataset.lid, b.dataset.d));
+      });
     }
   }
 
-  // Overdue list grouped by investor
+  // Overdue: only NOT collected items
   const overdueByInv = {};
-  overdueItems.forEach(i => {
+  overdueSection.forEach(i => {
     if (!overdueByInv[i.investor]) overdueByInv[i.investor] = [];
     overdueByInv[i.investor].push(i);
   });
 
   if (overdueList) {
-    if (overdueItems.length === 0) {
+    if (overdueSection.length === 0) {
       overdueList.innerHTML = '<div class="empty-state"><p>ไม่มีรายการค้างเก็บ</p></div>';
     } else {
       overdueList.innerHTML = Object.entries(overdueByInv).map(([inv, items]) => {
