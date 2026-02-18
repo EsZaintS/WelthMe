@@ -11,7 +11,7 @@ const CATEGORIES = {
 };
 
 const S = { tx: [], loans: [], openBal: 0, curType: "income", editTx: null, editLoan: null, charts: {} };
-let _debugCollect = false;
+let _debugCollect = false, _debugLid = "", _debugDate = "";
 
 // ── Helpers ──
 const $ = (sel) => document.querySelector(sel);
@@ -690,7 +690,7 @@ function collectDayInt(loanId, dateStr) {
   else loan.interestDailyRecords.push({ date: dateStr, received: true });
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
-  _debugCollect = true;
+  _debugCollect = true; _debugLid = loanId; _debugDate = dateStr;
   save();
   try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
   try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
@@ -1006,7 +1006,12 @@ function renderAgent() {
   console.log("[renderAgent]", { todayCount: todaySection.length, overdueCount: overdueSection.length, intToday, comToday, transferToday, totalOverdue, todayItems: todaySection.map(i => ({ borrower: i.loan.borrowerName, date: i.date, collected: i.collected, isOverdue: i.isOverdue })) });
   if (_debugCollect) {
     _debugCollect = false;
-    alert(`[DEBUG] todaySection: ${todaySection.length} items\noverdue collected in today: ${todaySection.filter(i=>i.isOverdue&&i.collected).length}\nintToday: ${intToday}\ncomToday: ${comToday}\ntransferToday: ${transferToday}\noverdueLeft: ${overdueSection.length}`);
+    const dbgLoan = S.loans.find(l => l.id === _debugLid);
+    const dbgInv = dbgLoan ? (dbgLoan.investor||"").trim() : "NO LOAN";
+    const dbgType = dbgLoan ? dbgLoan.interestType : "?";
+    const dbgRec = dbgLoan ? (dbgLoan.interestDailyRecords||[]).find(r => r.date === _debugDate) : null;
+    const dbgInList = invLoans.some(l => l.id === _debugLid);
+    alert(`[DEBUG]\ntodaySection: ${todaySection.length}\noverdueCollected: ${todaySection.filter(i=>i.isOverdue&&i.collected).length}\noverdueLeft: ${overdueSection.length}\n---\nloanId: ${_debugLid}\ndate: ${_debugDate}\ninvestor: ${dbgInv}\ntype: ${dbgType}\nrecord: ${JSON.stringify(dbgRec)}\ninInvLoans: ${dbgInList}\ntoday: ${today}`);
   }
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
