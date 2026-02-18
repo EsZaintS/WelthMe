@@ -6,8 +6,8 @@
 const KEYS = { tx: "ledger_transactions", loans: "ledger_loans", opening: "ledger_opening_balance" };
 
 const CATEGORIES = {
-  income: ["เงินเดือน", "โบนัส", "Freelance", "ลงทุน", "อื่นๆ"],
-  expense: ["อาหาร", "ค่าน้ำค่าไฟ", "ค่าเช่า", "ค่าโทรศัพท์", "ค่าอินเทอร์เน็ต", "การเดินทาง", "ช็อปปิ้ง", "บันเทิง", "เติมเกม", "สุขภาพ", "การศึกษา", "สินเชื่อบ้าน", "สินเชื่อรถ", "สินเชื่อส่วนบุคคล", "บัตรเครดิต", "อื่นๆ"],
+  income: ["เงินเดือน", "โบนัส", "Freelance", "ลงทุน", "ดอกเบี้ย", "คอมมิสชั่น", "อื่นๆ"],
+  expense: ["อาหาร", "ค่าน้ำ", "ค่าไฟ", "ค่าเช่า", "ค่าโทรศัพท์", "ค่าอินเทอร์เน็ต", "การเดินทาง", "ช็อปปิ้ง", "บันเทิง", "เติมเกม", "สุขภาพ", "การศึกษา", "สินเชื่อบ้าน", "สินเชื่อรถ", "สินเชื่อส่วนบุคคล", "บัตรเครดิต", "อื่นๆ"],
 };
 
 const S = { tx: [], loans: [], openBal: 0, curType: "income", editTx: null, editLoan: null, charts: {} };
@@ -274,12 +274,15 @@ function renderLedger() {
 
   if (sorted.length === 0) { list.innerHTML = openRow + '<div class="empty-state"><p>ยังไม่มีรายการ</p></div>'; return; }
 
-  const rows = sorted.map(t => {
+  const withBal = sorted.map(t => {
     running += t.type === "income" ? t.amount : -t.amount;
-    return `<div class="tx-row is-${t.type}" data-id="${t.id}"><div class="tx-dot">${t.type === "income" ? "↑" : "↓"}</div><div class="tx-info"><div class="tx-desc">${esc(t.description)}</div><div class="tx-meta">${fmtDate(t.date)}</div></div><span class="tx-cat">${esc(t.category)}</span><span class="tx-amount">${t.type === "income" ? "+" : "-"}${fmtMoney(t.amount)}</span><span class="tx-balance">${fmtMoney(running)}</span><span class="tx-actions"><button class="btn btn-icon edit-tx" title="แก้ไข">✎</button><button class="btn btn-icon del-tx" title="ลบ">✕</button></span></div>`;
+    return { ...t, _bal: running };
+  });
+  const rows = [...withBal].reverse().map(t => {
+    return `<div class="tx-row is-${t.type}" data-id="${t.id}"><div class="tx-dot">${t.type === "income" ? "↑" : "↓"}</div><div class="tx-info"><div class="tx-desc">${esc(t.description)}</div><div class="tx-meta">${fmtDate(t.date)}</div></div><span class="tx-cat">${esc(t.category)}</span><span class="tx-amount">${t.type === "income" ? "+" : "-"}${fmtMoney(t.amount)}</span><span class="tx-balance">${fmtMoney(t._bal)}</span><span class="tx-actions"><button class="btn btn-icon edit-tx" title="แก้ไข">✎</button><button class="btn btn-icon del-tx" title="ลบ">✕</button></span></div>`;
   }).join("");
 
-  list.innerHTML = openRow + rows;
+  list.innerHTML = rows + openRow;
   list.querySelectorAll(".edit-tx").forEach(b => b.addEventListener("click", () => editTx(b.closest(".tx-row").dataset.id)));
   list.querySelectorAll(".del-tx").forEach(b => b.addEventListener("click", () => deleteTx(b.closest(".tx-row").dataset.id)));
 }
