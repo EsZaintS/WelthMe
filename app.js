@@ -85,6 +85,8 @@ function initCharts() {
   if (c2) S.charts.monthly = new Chart(c2.getContext("2d"), { type: "bar", data: { labels: [], datasets: [{ label: "รายรับ", data: [], backgroundColor: CC.green, borderRadius: 6 },{ label: "รายจ่าย", data: [], backgroundColor: CC.red, borderRadius: 6 }] }, options: { ...CO, plugins: { legend: { position: "top", labels: { color: "#94a3b8" } } }, scales: grd() } });
   const c3 = $("#chartCategory");
   if (c3) S.charts.cat = new Chart(c3.getContext("2d"), { type: "bar", data: { labels: [], datasets: [{ label: "รายจ่าย", data: [], backgroundColor: CC.palette, borderRadius: 6 }] }, options: { ...CO, indexAxis: "y", plugins: { legend: { display: false } }, scales: grd() } });
+  const c3b = $("#chartIncCat");
+  if (c3b) S.charts.incCat = new Chart(c3b.getContext("2d"), { type: "bar", data: { labels: [], datasets: [{ label: "รายรับ", data: [], backgroundColor: CC.palette, borderRadius: 6 }] }, options: { ...CO, indexAxis: "y", plugins: { legend: { display: false } }, scales: grd() } });
   const c4 = $("#chartForecast");
   if (c4) S.charts.forecast = new Chart(c4.getContext("2d"), { type: "line", data: { labels: [], datasets: [{ label: "ยอดสะสม (บาท)", data: [], borderColor: "#f59e0b", backgroundColor: "rgba(245,158,11,.10)", fill: true, tension: .35, pointRadius: 2 }] }, options: { ...CO, plugins: { legend: { display: false } }, scales: grd() } });
 }
@@ -144,7 +146,7 @@ function updateCharts() {
     S.charts.monthly.update();
   }
 
-  // Category
+  // Expense Category
   const byCat = {};
   S.tx.filter(t => t.type === "expense").forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
   const cats = Object.entries(byCat).sort((a,b) => b[1]-a[1]).slice(0, 8);
@@ -155,16 +157,33 @@ function updateCharts() {
     S.charts.cat.update();
   }
 
+  // Income Category
+  const byIncCat = {};
+  S.tx.filter(t => t.type === "income").forEach(t => { byIncCat[t.category] = (byIncCat[t.category] || 0) + t.amount; });
+  if (perf.received > 0) byIncCat["ดอกเบี้ยเงินยืม"] = (byIncCat["ดอกเบี้ยเงินยืม"] || 0) + perf.received;
+  if (perf.comReceived > 0) byIncCat["คอมมิสชั่น"] = (byIncCat["คอมมิสชั่น"] || 0) + perf.comReceived;
+  const incCats = Object.entries(byIncCat).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  if (S.charts.incCat) {
+    S.charts.incCat.data.labels = incCats.map(c => c[0]);
+    S.charts.incCat.data.datasets[0].data = incCats.map(c => c[1]);
+    S.charts.incCat.data.datasets[0].backgroundColor = CC.palette.slice(0, incCats.length);
+    S.charts.incCat.update();
+  }
+
   // Performance
   setText("#dashIntReceived", fmtMoney(perf.received));
   setText("#dashIntPending", fmtMoney(perf.pending));
-  setText("#dashCollectRate", perf.rate.toFixed(1) + "%");
+  setText("#dashComReceived", fmtMoney(perf.comReceived));
+  setText("#dashComPending", fmtMoney(perf.comPending));
+  const totalAll = perf.received + perf.pending + perf.comReceived + perf.comPending;
+  const totalRcv = perf.received + perf.comReceived;
+  setText("#dashCollectRate", totalAll > 0 ? (totalRcv / totalAll * 100).toFixed(1) + "%" : "0%");
   setText("#dashFc7", fmtMoney(perf.fc7));
   setText("#dashFc30", fmtMoney(perf.fc30));
 
   if (S.charts.forecast) {
     const lbls = [], data = [];
-    let cum = perf.received + perf.pending;
+    let cum = perf.received + perf.pending + perf.comReceived + perf.comPending;
     const daily = perf.fc7 / 7;
     for (let i = 0; i <= 14; i++) { const d = new Date(); d.setDate(d.getDate()+i); lbls.push(d.toLocaleDateString("th-TH",{day:"numeric",month:"short"})); data.push(i === 0 ? cum : (cum += daily, cum)); }
     S.charts.forecast.data.labels = lbls;
