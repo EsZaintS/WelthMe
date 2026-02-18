@@ -454,10 +454,30 @@ function groupByBorrower() {
 }
 
 // ── Loan Form ──
+function getBorrowerNames() {
+  return [...new Set(S.loans.map(l => (l.borrowerName || "").trim()).filter(Boolean))].sort();
+}
+
 function fillBorrowerList() {
-  const dl = $("#borrowerList"); if (!dl) return;
-  const names = [...new Set(S.loans.map(l => (l.borrowerName || "").trim()).filter(Boolean))].sort();
-  dl.innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+  const inp = $("#lnBorrower"), dd = $("#borrowerDropdown");
+  if (!inp || !dd || inp._acReady) return;
+  inp._acReady = true;
+
+  function showDD() {
+    const names = getBorrowerNames();
+    const q = (inp.value || "").trim().toLowerCase();
+    const filtered = q ? names.filter(n => n.toLowerCase().includes(q)) : names;
+    if (filtered.length === 0) { dd.style.display = "none"; return; }
+    dd.innerHTML = filtered.map(n => `<div class="ac-item">${esc(n)}</div>`).join("");
+    dd.style.display = "block";
+    dd.querySelectorAll(".ac-item").forEach(item => {
+      item.addEventListener("mousedown", (e) => { e.preventDefault(); inp.value = item.textContent; dd.style.display = "none"; });
+    });
+  }
+
+  inp.addEventListener("focus", showDD);
+  inp.addEventListener("input", showDD);
+  inp.addEventListener("blur", () => { setTimeout(() => { dd.style.display = "none"; }, 150); });
 }
 
 function setupLoanForm() {
