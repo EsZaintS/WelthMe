@@ -514,6 +514,21 @@ function fillInvestorList() {
   inp.addEventListener("blur", () => { setTimeout(() => { dd.style.display = "none"; }, 150); });
 }
 
+function updateInvCalcDisplay() {
+  const sel = $("#lnIntType");
+  const v = sel ? sel.value : "daily";
+  const interest = v === "fixedWeekly" ? (parseFloat($("#lnFixedWeekly").value) || 0) : (parseFloat($("#lnFixed").value) || 0);
+  const com = parseFloat($("#lnCommission").value) || 0;
+  const hasInvestor = ($("#lnInvestor").value || "").trim() !== "";
+  const isFixed = (v === "fixed" || v === "fixedWeekly");
+  const gic = $("#grpInvCalc");
+  if (gic) gic.style.display = (hasInvestor && isFixed) ? "flex" : "none";
+  const periodEl = $("#invCalcPeriod");
+  if (periodEl) periodEl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
+  const display = $("#invCalcDisplay");
+  if (display) display.textContent = fmtMoney(Math.max(0, interest - com)) + " บาท";
+}
+
 function setupLoanForm() {
   const form = $("#loanForm"); if (!form) return;
   form.addEventListener("submit", handleLoanSubmit);
@@ -529,7 +544,13 @@ function setupLoanForm() {
     if (gfw) gfw.style.display = v === "fixedWeekly" ? "flex" : "none";
     if (gc) gc.style.display = (v === "fixed" || v === "fixedWeekly") ? "flex" : "none";
     const pl = $("#comPeriodLabel"); if (pl) pl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
+    updateInvCalcDisplay();
   });
+  ["lnFixed", "lnFixedWeekly", "lnCommission"].forEach(id => {
+    const el = $(`#${id}`); if (el) el.addEventListener("input", updateInvCalcDisplay);
+  });
+  const invInp = $("#lnInvestor");
+  if (invInp) { invInp.addEventListener("input", updateInvCalcDisplay); invInp.addEventListener("blur", () => setTimeout(updateInvCalcDisplay, 200)); }
   const d = $("#lnDate"); if (d) d.value = todayStr();
 }
 
@@ -582,6 +603,7 @@ function editLoan(id) {
   if (v === "fixedWeekly") { $("#lnFixedWeekly").value = l.interestFixedWeekly || ""; }
   $("#lnCommission").value = l.commission || "";
   $("#lnInvestor").value = l.investor || "";
+  updateInvCalcDisplay();
 
   $("#cancelLnBtn").style.display = "inline-flex";
   $("#loanFormTitle").textContent = "แก้ไขเงินยืม";
@@ -596,11 +618,12 @@ function cancelLoanEdit() {
   const btn = $("#cancelLnBtn"); if (btn) btn.style.display = "none";
   const title = $("#loanFormTitle"); if (title) title.textContent = "เพิ่มเงินยืม";
   $("#loanForm").reset(); $("#lnDate").value = todayStr();
-  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
+  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission"), gic = $("#grpInvCalc");
   if (gr) gr.style.display = "flex";
   if (gf) gf.style.display = "none";
   if (gfw) gfw.style.display = "none";
   if (gc) gc.style.display = "none";
+  if (gic) gic.style.display = "none";
 }
 
 function addPayment(loanId, amtStr) {

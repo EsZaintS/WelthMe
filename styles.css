@@ -372,6 +372,16 @@ body {
   padding: .5rem .75rem; font-size: .85rem; color: var(--t1); cursor: pointer;
 }
 .ac-item:hover, .ac-item:active { background: var(--bg-hover); }
+.inv-calc-display {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--amber);
+  padding: .52rem .72rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .field-actions { flex-direction: row; align-items: flex-end; gap: .5rem; }
 .span-full { grid-column: 1 / -1; }
 
