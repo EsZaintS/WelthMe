@@ -299,7 +299,7 @@ function renderLedger() {
   if (balEl) { balEl.textContent = fmtMoney(bal); balEl.style.color = bal >= 0 ? "var(--blue)" : "var(--red)"; }
 
   const list = $("#txList"); if (!list) return;
-  const sorted = [...filtered].sort((a,b) => new Date(a.date) - new Date(b.date));
+  const sorted = [...filtered].sort((a,b) => new Date(a.date) - new Date(b.date) || (a.createdAt || 0) - (b.createdAt || 0));
   let running = S.openBal;
 
   const openRow = `<div class="tx-row is-opening"><div class="tx-dot">≡</div><div class="tx-info"><div class="tx-desc">ยอดยกมา</div><div class="tx-meta">ยอดคงเหลือจากช่วงก่อนหน้า</div></div><span class="tx-cat">—</span><span class="tx-amount">${fmtMoney(S.openBal)}</span><span class="tx-balance">${fmtMoney(running)}</span><span class="tx-actions"></span></div>`;
