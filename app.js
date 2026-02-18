@@ -11,6 +11,7 @@ const CATEGORIES = {
 };
 
 const S = { tx: [], loans: [], openBal: 0, curType: "income", editTx: null, editLoan: null, charts: {} };
+let _debugCollect = false;
 
 // ── Helpers ──
 const $ = (sel) => document.querySelector(sel);
@@ -689,6 +690,7 @@ function collectDayInt(loanId, dateStr) {
   else loan.interestDailyRecords.push({ date: dateStr, received: true });
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
+  _debugCollect = true;
   save();
   try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
   try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
@@ -705,6 +707,7 @@ function collectWeekInt(loanId, weekStart) {
   else loan.interestWeeklyRecords.push({ weekStart, received: true });
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
+  _debugCollect = true;
   save();
   try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
   try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
@@ -1001,6 +1004,10 @@ function renderAgent() {
   });
   overdueSection.forEach(i => { totalOverdue += i.intAmt; });
   console.log("[renderAgent]", { todayCount: todaySection.length, overdueCount: overdueSection.length, intToday, comToday, transferToday, totalOverdue, todayItems: todaySection.map(i => ({ borrower: i.loan.borrowerName, date: i.date, collected: i.collected, isOverdue: i.isOverdue })) });
+  if (_debugCollect) {
+    _debugCollect = false;
+    alert(`[DEBUG] todaySection: ${todaySection.length} items\noverdue collected in today: ${todaySection.filter(i=>i.isOverdue&&i.collected).length}\nintToday: ${intToday}\ncomToday: ${comToday}\ntransferToday: ${transferToday}\noverdueLeft: ${overdueSection.length}`);
+  }
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
   setText("#agentTransferToday", fmtMoney(transferToday));
