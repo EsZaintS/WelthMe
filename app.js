@@ -95,7 +95,7 @@ function initCharts() {
 function updateCharts() {
   const { inc: txInc, exp: txExp } = S.tx.reduce((a, t) => { t.type === "income" ? a.inc += t.amount : a.exp += t.amount; return a; }, { inc: 0, exp: 0 });
   const perf = loanPerf();
-  const totalInc = txInc + (perf.received || 0) + (perf.comReceived || 0);
+  const totalInc = txInc + (perf.agentIncRcv || 0);
   const bal = S.openBal + totalInc - txExp;
 
   setText("#dashIncome", fmtMoney(totalInc));
@@ -109,34 +109,38 @@ function updateCharts() {
 
   if (S.charts.donut) { S.charts.donut.data.datasets[0].data = [totalInc || 0.01, txExp || 0.01]; S.charts.donut.update(); }
 
-  // Monthly
+  // Monthly -- only count agent's actual income per loan
   const byMo = {};
   S.tx.forEach(t => { const k = t.date.slice(0,7); if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; t.type === "income" ? byMo[k].i += t.amount : byMo[k].e += t.amount; });
   S.loans.forEach(l => {
-    if (l.interestType === "fixed" && l.interestFixed && l.interestDailyRecords) {
-      l.interestDailyRecords.filter(r => r.received).forEach(r => {
-        const k = (r.date || "").slice(0,7);
-        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += l.interestFixed; }
-      });
-    }
-    if (l.interestType === "fixedWeekly" && l.interestFixedWeekly && l.interestWeeklyRecords) {
-      l.interestWeeklyRecords.filter(r => r.received).forEach(r => {
-        const k = (r.weekStart || "").slice(0,7);
-        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += l.interestFixedWeekly; }
-      });
-    }
-    const com = Number(l.commission) || 0;
-    if (com > 0 && l.interestType === "fixed" && l.commissionDailyRecords) {
-      l.commissionDailyRecords.filter(r => r.received).forEach(r => {
-        const k = (r.date || "").slice(0,7);
-        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
-      });
-    }
-    if (com > 0 && l.interestType === "fixedWeekly" && l.commissionWeeklyRecords) {
-      l.commissionWeeklyRecords.filter(r => r.received).forEach(r => {
-        const k = (r.weekStart || "").slice(0,7);
-        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
-      });
+    const hasInv = (l.investor || "").trim() !== "";
+    if (hasInv) {
+      const com = Number(l.commission) || 0;
+      if (com > 0 && l.interestType === "fixed" && l.commissionDailyRecords) {
+        l.commissionDailyRecords.filter(r => r.received).forEach(r => {
+          const k = (r.date || "").slice(0,7);
+          if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
+        });
+      }
+      if (com > 0 && l.interestType === "fixedWeekly" && l.commissionWeeklyRecords) {
+        l.commissionWeeklyRecords.filter(r => r.received).forEach(r => {
+          const k = (r.weekStart || "").slice(0,7);
+          if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
+        });
+      }
+    } else {
+      if (l.interestType === "fixed" && l.interestFixed && l.interestDailyRecords) {
+        l.interestDailyRecords.filter(r => r.received).forEach(r => {
+          const k = (r.date || "").slice(0,7);
+          if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += l.interestFixed; }
+        });
+      }
+      if (l.interestType === "fixedWeekly" && l.interestFixedWeekly && l.interestWeeklyRecords) {
+        l.interestWeeklyRecords.filter(r => r.received).forEach(r => {
+          const k = (r.weekStart || "").slice(0,7);
+          if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += l.interestFixedWeekly; }
+        });
+      }
     }
   });
   const mos = Object.keys(byMo).sort().slice(-6);
@@ -158,11 +162,13 @@ function updateCharts() {
     S.charts.cat.update();
   }
 
-  // Income Category
+  // Income Category -- only agent's income
   const byIncCat = {};
   S.tx.filter(t => t.type === "income").forEach(t => { byIncCat[t.category] = (byIncCat[t.category] || 0) + t.amount; });
-  if (perf.received > 0) byIncCat["ดอกเบี้ยเงินยืม"] = (byIncCat["ดอกเบี้ยเงินยืม"] || 0) + perf.received;
-  if (perf.comReceived > 0) byIncCat["คอมมิสชั่น"] = (byIncCat["คอมมิสชั่น"] || 0) + perf.comReceived;
+  const ownIntRcv = S.loans.reduce((s, l) => { if (!(l.investor || "").trim()) { const c = calcInt(l); return s + (c.intRcv || 0); } return s; }, 0);
+  const invComRcv = S.loans.reduce((s, l) => { if ((l.investor || "").trim()) { const c = calcInt(l); return s + (c.comRcv || 0); } return s; }, 0);
+  if (ownIntRcv > 0) byIncCat["ดอกเบี้ยเงินยืม"] = (byIncCat["ดอกเบี้ยเงินยืม"] || 0) + ownIntRcv;
+  if (invComRcv > 0) byIncCat["คอมมิสชั่น"] = (byIncCat["คอมมิสชั่น"] || 0) + invComRcv;
   const incCats = Object.entries(byIncCat).sort((a,b) => b[1]-a[1]).slice(0, 8);
   if (S.charts.incCat) {
     S.charts.incCat.data.labels = incCats.map(c => c[0]);
@@ -171,20 +177,19 @@ function updateCharts() {
     S.charts.incCat.update();
   }
 
-  // Performance
+  // Performance -- show total interest collected and agent's actual income
   setText("#dashIntReceived", fmtMoney(perf.received));
   setText("#dashIntPending", fmtMoney(perf.pending));
   setText("#dashComReceived", fmtMoney(perf.comReceived));
   setText("#dashComPending", fmtMoney(perf.comPending));
-  const totalAll = perf.received + perf.pending + perf.comReceived + perf.comPending;
-  const totalRcv = perf.received + perf.comReceived;
-  setText("#dashCollectRate", totalAll > 0 ? (totalRcv / totalAll * 100).toFixed(1) + "%" : "0%");
+  const agentTotal = perf.agentIncRcv + perf.agentIncPnd;
+  setText("#dashCollectRate", agentTotal > 0 ? (perf.agentIncRcv / agentTotal * 100).toFixed(1) + "%" : "0%");
   setText("#dashFc7", fmtMoney(perf.fc7));
   setText("#dashFc30", fmtMoney(perf.fc30));
 
   if (S.charts.forecast) {
     const lbls = [], data = [];
-    let cum = perf.received + perf.pending + perf.comReceived + perf.comPending;
+    let cum = perf.agentIncRcv + perf.agentIncPnd;
     const daily = perf.fc7 / 7;
     for (let i = 0; i <= 14; i++) { const d = new Date(); d.setDate(d.getDate()+i); lbls.push(d.toLocaleDateString("th-TH",{day:"numeric",month:"short"})); data.push(i === 0 ? cum : (cum += daily, cum)); }
     S.charts.forecast.data.labels = lbls;
@@ -291,7 +296,7 @@ function renderLedger() {
   const filtered = getFiltered();
   const { inc: txInc, exp: txExp } = S.tx.reduce((a, t) => { t.type === "income" ? a.inc += t.amount : a.exp += t.amount; return a; }, { inc: 0, exp: 0 });
   const perf = loanPerf();
-  const totalInc = txInc + (perf.received || 0) + (perf.comReceived || 0);
+  const totalInc = txInc + (perf.agentIncRcv || 0);
   const bal = S.openBal + totalInc - txExp;
 
   setText("#ledgerIncome", fmtMoney(totalInc));
@@ -421,23 +426,34 @@ function calcInt(loan) {
 
 function loanPerf() {
   let received = 0, pending = 0, fc7 = 0, fc30 = 0, comReceived = 0, comPending = 0;
+  let agentIncRcv = 0, agentIncPnd = 0;
   S.loans.forEach(l => {
     const c = calcInt(l);
     if (c.remain <= 0) return;
+    const hasInv = (l.investor || "").trim() !== "";
     received += c.intRcv || 0;
     pending += c.interest || 0;
     comReceived += c.comRcv || 0;
     comPending += c.comUnp || 0;
-    const com = Number(l.commission) || 0;
-    if (l.interestType === "fixed" && l.interestFixed) { fc7 += (l.interestFixed + com) * 7; fc30 += (l.interestFixed + com) * 30; }
-    else if (l.interestType === "fixedWeekly" && l.interestFixedWeekly) { fc7 += (l.interestFixedWeekly + com); fc30 += (l.interestFixedWeekly + com) * (30/7); }
-    else if (c.interest && c.periods) {
-      const perDay = l.interestType === "weekly" ? (c.remain * (l.interestRate || 0) / 100) / 7 : c.remain * (l.interestRate || 0) / 100;
-      fc7 += perDay * 7; fc30 += perDay * 30;
+    if (hasInv) {
+      agentIncRcv += c.comRcv || 0;
+      agentIncPnd += c.comUnp || 0;
+      const com = Number(l.commission) || 0;
+      if (l.interestType === "fixed" && com) { fc7 += com * 7; fc30 += com * 30; }
+      else if (l.interestType === "fixedWeekly" && com) { fc7 += com; fc30 += com * (30/7); }
+    } else {
+      agentIncRcv += c.intRcv || 0;
+      agentIncPnd += c.interest || 0;
+      if (l.interestType === "fixed" && l.interestFixed) { fc7 += l.interestFixed * 7; fc30 += l.interestFixed * 30; }
+      else if (l.interestType === "fixedWeekly" && l.interestFixedWeekly) { fc7 += l.interestFixedWeekly; fc30 += l.interestFixedWeekly * (30/7); }
+      else if (c.interest && c.periods) {
+        const perDay = l.interestType === "weekly" ? (c.remain * (l.interestRate || 0) / 100) / 7 : c.remain * (l.interestRate || 0) / 100;
+        fc7 += perDay * 7; fc30 += perDay * 30;
+      }
     }
   });
   const total = received + pending;
-  return { received, pending, fc7, fc30, rate: total > 0 ? (received / total) * 100 : 0, comReceived, comPending };
+  return { received, pending, fc7, fc30, rate: total > 0 ? (received / total) * 100 : 0, comReceived, comPending, agentIncRcv, agentIncPnd };
 }
 
 function groupByBorrower() {
@@ -759,7 +775,7 @@ function renderLoans() {
       if (hasCom) {
         intBadge += `<div class="int-item"><span class="int-label">คอมฯ ${comPeriodLabel}</span><span class="int-val com">${fmtMoney(c.comRcv)} / ${fmtMoney(c.comTotal)}</span></div>`;
       }
-      intBadge += `<div class="int-item"><span class="int-label">ค้างรับรวม</span><span class="int-val pnd">${fmtMoney((c.interest || 0) + (c.comUnp || 0))}</span></div>`;
+      intBadge += `<div class="int-item"><span class="int-label">ค้างเก็บ</span><span class="int-val pnd">${fmtMoney(c.interest || 0)}</span></div>`;
       intBadge += `</div>`;
     }
 
