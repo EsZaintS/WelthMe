@@ -617,6 +617,16 @@ body {
 .day-box.done .dlabel,
 .day-box.done .damount { color: var(--green); }
 
+/* Commission boxes */
+.com-section .daily-title { color: var(--amber); }
+.day-box.com-box { border-color: var(--bg-3); }
+.day-box.com-box:hover { border-color: var(--amber); }
+.day-box.com-box.done { border-color: var(--amber); background: var(--amber-soft); }
+.day-box.com-box.done .dlabel,
+.day-box.com-box.done .damount { color: var(--amber); }
+
+.int-val.com { color: var(--amber); }
+
 /* Payment inline */
 .pay-row {
   display: flex; gap: .5rem; align-items: center;

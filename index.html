@@ -172,7 +172,7 @@
           <div class="card-head"><h3>สรุปตามผู้ยืม</h3></div>
           <div class="table-scroll">
             <table class="tbl" id="borrowerTable">
-              <thead><tr><th>ชื่อ</th><th>รายการ</th><th>วัน</th><th>เงินต้น</th><th>ชำระแล้ว</th><th>ค้าง</th><th>ดอกเบี้ยรวม</th><th>รวมทั้งหมด</th></tr></thead>
+              <thead><tr><th>ชื่อ</th><th>รายการ</th><th>วัน</th><th>เงินต้น</th><th>ชำระแล้ว</th><th>ค้าง</th><th>ดอกเบี้ย</th><th>คอมฯ</th><th>รวมทั้งหมด</th></tr></thead>
               <tbody id="borrowerBody"></tbody>
             </table>
           </div>
@@ -194,8 +194,9 @@
               </select>
             </div>
             <div class="field" id="grpRate"><label>อัตรา (%)</label><input type="number" id="lnRate" placeholder="0.1" min="0" step="0.01" /></div>
-            <div class="field" id="grpFixed" style="display:none"><label>บาท/วัน</label><input type="number" id="lnFixed" placeholder="100" min="0" step="0.01" /></div>
-            <div class="field" id="grpFixedWeekly" style="display:none"><label>บาท/สัปดาห์</label><input type="number" id="lnFixedWeekly" placeholder="500" min="0" step="0.01" /></div>
+            <div class="field" id="grpFixed" style="display:none"><label>ดอกเบี้ย (บาท/วัน)</label><input type="number" id="lnFixed" placeholder="100" min="0" step="0.01" /></div>
+            <div class="field" id="grpFixedWeekly" style="display:none"><label>ดอกเบี้ย (บาท/สัปดาห์)</label><input type="number" id="lnFixedWeekly" placeholder="500" min="0" step="0.01" /></div>
+            <div class="field" id="grpCommission" style="display:none"><label>คอมมิสชั่น (บาท/<span id="comPeriodLabel">วัน</span>)</label><input type="number" id="lnCommission" placeholder="0" min="0" step="0.01" /></div>
             <div class="field span-full"><label>หมายเหตุ</label><input type="text" id="lnNote" placeholder="เช่น ยืมไปซื้อของ" /></div>
             <div class="field field-actions">
               <button type="submit" class="btn btn-amber">บันทึกเงินยืม</button>

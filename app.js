@@ -38,7 +38,7 @@ function toast(msg, type = "success") {
 // ── Storage ──
 function load() {
   try { S.tx = JSON.parse(localStorage.getItem(KEYS.tx)) || []; } catch { S.tx = []; }
-  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; }); } catch { S.loans = []; }
+  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; }); } catch { S.loans = []; }
   try { S.openBal = parseFloat(localStorage.getItem(KEYS.opening)) || 0; } catch { S.openBal = 0; }
 }
 function save() {
@@ -92,7 +92,7 @@ function initCharts() {
 function updateCharts() {
   const { inc: txInc, exp: txExp } = S.tx.reduce((a, t) => { t.type === "income" ? a.inc += t.amount : a.exp += t.amount; return a; }, { inc: 0, exp: 0 });
   const perf = loanPerf();
-  const totalInc = txInc + (perf.received || 0);
+  const totalInc = txInc + (perf.received || 0) + (perf.comReceived || 0);
   const bal = S.openBal + totalInc - txExp;
 
   setText("#dashIncome", fmtMoney(totalInc));
@@ -120,6 +120,19 @@ function updateCharts() {
       l.interestWeeklyRecords.filter(r => r.received).forEach(r => {
         const k = (r.weekStart || "").slice(0,7);
         if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += l.interestFixedWeekly; }
+      });
+    }
+    const com = Number(l.commission) || 0;
+    if (com > 0 && l.interestType === "fixed" && l.commissionDailyRecords) {
+      l.commissionDailyRecords.filter(r => r.received).forEach(r => {
+        const k = (r.date || "").slice(0,7);
+        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
+      });
+    }
+    if (com > 0 && l.interestType === "fixedWeekly" && l.commissionWeeklyRecords) {
+      l.commissionWeeklyRecords.filter(r => r.received).forEach(r => {
+        const k = (r.weekStart || "").slice(0,7);
+        if (k) { if (!byMo[k]) byMo[k] = { i: 0, e: 0 }; byMo[k].i += com; }
       });
     }
   });
@@ -258,7 +271,7 @@ function renderLedger() {
   const filtered = getFiltered();
   const { inc: txInc, exp: txExp } = S.tx.reduce((a, t) => { t.type === "income" ? a.inc += t.amount : a.exp += t.amount; return a; }, { inc: 0, exp: 0 });
   const perf = loanPerf();
-  const totalInc = txInc + (perf.received || 0);
+  const totalInc = txInc + (perf.received || 0) + (perf.comReceived || 0);
   const bal = S.openBal + totalInc - txExp;
 
   setText("#ledgerIncome", fmtMoney(totalInc));
@@ -288,24 +301,56 @@ function renderLedger() {
 }
 
 // ── Loan Interest Calc ──
+function calcCom(loan, daysT, weeksT) {
+  const perCom = Number(loan.commission) || 0;
+  if (perCom <= 0) return { comRcv: 0, comUnp: 0, comTotal: 0, perCom: 0, comDaysR: 0, comWeeksR: 0 };
+  if (loan.interestType === "fixed") {
+    const recs = loan.commissionDailyRecords || [];
+    const startDay = nextDay(loan.date);
+    const today = todayStr();
+    const allDays = startDay <= today ? dateRange(startDay, today) : [];
+    const rcvSet = new Set(recs.filter(r => r.received).map(r => r.date));
+    const comDaysR = allDays.filter(d => rcvSet.has(d)).length;
+    const comRcv = comDaysR * perCom;
+    const comTotal = allDays.length * perCom;
+    return { comRcv, comUnp: Math.max(0, comTotal - comRcv), comTotal, perCom, comDaysR, comWeeksR: 0 };
+  }
+  if (loan.interestType === "fixedWeekly") {
+    const recs = loan.commissionWeeklyRecords || [];
+    const startDay = nextDay(loan.date);
+    const endW = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+    const weeks = startDay <= endW ? weekStarts(startDay, endW) : [];
+    const rcvSet = new Set(recs.filter(r => r.received).map(r => r.weekStart));
+    const comWeeksR = [...rcvSet].filter(w => weeks.includes(w)).length;
+    const comRcv = comWeeksR * perCom;
+    const comTotal = weeks.length * perCom;
+    return { comRcv, comUnp: Math.max(0, comTotal - comRcv), comTotal, perCom, comDaysR: 0, comWeeksR };
+  }
+  return { comRcv: 0, comUnp: 0, comTotal: 0, perCom: 0, comDaysR: 0, comWeeksR: 0 };
+}
+
 function calcInt(loan) {
   const principal = loan.amount;
   const paid = (loan.payments || []).reduce((s, p) => s + p.amount, 0);
   const remain = Math.max(0, principal - paid);
+  const base = { principal, paid, remain };
+
   if (remain <= 0) {
     if (loan.interestType === "fixed") {
       const perDay = Number(loan.interestFixed) || 0;
       const daysR = (loan.interestDailyRecords || []).filter(r => r.received).length;
       const intRcv = daysR * perDay;
-      return { principal, paid, remain: 0, interest: 0, totalDue: 0, intRcv, daysT: 0, daysR, perDay, intTotal: intRcv, weeksT: 0, weeksR: 0, perWeek: 0 };
+      const cm = calcCom(loan, 0, 0);
+      return { ...base, interest: 0, totalDue: 0, intRcv, daysT: 0, daysR, perDay, intTotal: intRcv, weeksT: 0, weeksR: 0, perWeek: 0, ...cm };
     }
     if (loan.interestType === "fixedWeekly") {
       const perWeek = Number(loan.interestFixedWeekly) || 0;
       const weeksR = (loan.interestWeeklyRecords || []).filter(r => r.received).length;
       const intRcv = weeksR * perWeek;
-      return { principal, paid, remain: 0, interest: 0, totalDue: 0, intRcv, daysT: 0, daysR: 0, perDay: 0, intTotal: intRcv, weeksT: 0, weeksR, perWeek };
+      const cm = calcCom(loan, 0, 0);
+      return { ...base, interest: 0, totalDue: 0, intRcv, daysT: 0, daysR: 0, perDay: 0, intTotal: intRcv, weeksT: 0, weeksR, perWeek, ...cm };
     }
-    return { principal, paid, remain: 0, interest: 0, totalDue: 0, intRcv: 0, daysT: 0, daysR: 0, perDay: 0, intTotal: 0, weeksT: 0, weeksR: 0, perWeek: 0 };
+    return { ...base, interest: 0, totalDue: 0, intRcv: 0, daysT: 0, daysR: 0, perDay: 0, intTotal: 0, weeksT: 0, weeksR: 0, perWeek: 0, comRcv: 0, comUnp: 0, comTotal: 0, perCom: 0, comDaysR: 0, comWeeksR: 0 };
   }
 
   if (loan.interestType === "fixed") {
@@ -313,21 +358,22 @@ function calcInt(loan) {
     const recs = loan.interestDailyRecords || [];
     const rcvSet = new Set(recs.filter(r => r.received).map(r => r.date));
     const today = todayStr();
-    const startDay = nextDay(loan.date); // เริ่มเก็บดอกเบี้ยวันถัดไป
+    const startDay = nextDay(loan.date);
     const allDays = startDay <= today ? dateRange(startDay, today) : [];
     const daysT = allDays.length;
     const daysR = allDays.filter(d => rcvSet.has(d)).length;
     const intRcv = daysR * perDay;
     const intUnp = Math.max(0, (daysT - daysR) * perDay);
     const intTotal = daysT * perDay;
-    return { principal, paid, remain, interest: intUnp, totalDue: remain + intUnp, intRcv, daysT, daysR, perDay, intTotal, weeksT: 0, weeksR: 0, perWeek: 0 };
+    const cm = calcCom(loan, daysT, 0);
+    return { ...base, interest: intUnp, totalDue: remain + intUnp, intRcv, daysT, daysR, perDay, intTotal, weeksT: 0, weeksR: 0, perWeek: 0, ...cm };
   }
 
   if (loan.interestType === "fixedWeekly") {
     const perWeek = Number(loan.interestFixedWeekly) || 0;
     const recs = loan.interestWeeklyRecords || [];
     const rcvSet = new Set(recs.filter(r => r.received).map(r => r.weekStart));
-    const startDay = nextDay(loan.date); // เริ่มเก็บดอกเบี้ยวันถัดไป
+    const startDay = nextDay(loan.date);
     const endW = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
     const weeks = startDay <= endW ? weekStarts(startDay, endW) : [];
     const weeksT = weeks.length;
@@ -335,39 +381,43 @@ function calcInt(loan) {
     const intRcv = weeksR * perWeek;
     const intUnp = Math.max(0, (weeksT - weeksR) * perWeek);
     const intTotal = weeksT * perWeek;
-    return { principal, paid, remain, interest: intUnp, totalDue: remain + intUnp, intRcv, daysT: weeksT * 7, daysR: 0, perDay: 0, intTotal, weeksT, weeksR, perWeek };
+    const cm = calcCom(loan, 0, weeksT);
+    return { ...base, interest: intUnp, totalDue: remain + intUnp, intRcv, daysT: weeksT * 7, daysR: 0, perDay: 0, intTotal, weeksT, weeksR, perWeek, ...cm };
   }
 
   const ld = new Date(loan.date), now = new Date();
   const rate = Number(loan.interestRate) || 0;
   const periods = loan.interestType === "weekly" ? Math.floor((now - ld) / (7 * 864e5)) : Math.floor((now - ld) / 864e5);
   const interest = remain * (rate / 100) * Math.max(0, periods);
-  return { principal, paid, remain, interest, totalDue: remain + interest, periods, intRcv: 0, daysT: periods, daysR: 0, perDay: 0, intTotal: interest, weeksT: 0, weeksR: 0, perWeek: 0 };
+  return { ...base, interest, totalDue: remain + interest, periods, intRcv: 0, daysT: periods, daysR: 0, perDay: 0, intTotal: interest, weeksT: 0, weeksR: 0, perWeek: 0, comRcv: 0, comUnp: 0, comTotal: 0, perCom: 0, comDaysR: 0, comWeeksR: 0 };
 }
 
 function loanPerf() {
-  let received = 0, pending = 0, fc7 = 0, fc30 = 0;
+  let received = 0, pending = 0, fc7 = 0, fc30 = 0, comReceived = 0, comPending = 0;
   S.loans.forEach(l => {
     const c = calcInt(l);
     if (c.remain <= 0) return;
     received += c.intRcv || 0;
     pending += c.interest || 0;
-    if (l.interestType === "fixed" && l.interestFixed) { fc7 += l.interestFixed * 7; fc30 += l.interestFixed * 30; }
-    else if (l.interestType === "fixedWeekly" && l.interestFixedWeekly) { fc7 += l.interestFixedWeekly; fc30 += l.interestFixedWeekly * (30/7); }
+    comReceived += c.comRcv || 0;
+    comPending += c.comUnp || 0;
+    const com = Number(l.commission) || 0;
+    if (l.interestType === "fixed" && l.interestFixed) { fc7 += (l.interestFixed + com) * 7; fc30 += (l.interestFixed + com) * 30; }
+    else if (l.interestType === "fixedWeekly" && l.interestFixedWeekly) { fc7 += (l.interestFixedWeekly + com); fc30 += (l.interestFixedWeekly + com) * (30/7); }
     else if (c.interest && c.periods) {
       const perDay = l.interestType === "weekly" ? (c.remain * (l.interestRate || 0) / 100) / 7 : c.remain * (l.interestRate || 0) / 100;
       fc7 += perDay * 7; fc30 += perDay * 30;
     }
   });
   const total = received + pending;
-  return { received, pending, fc7, fc30, rate: total > 0 ? (received / total) * 100 : 0 };
+  return { received, pending, fc7, fc30, rate: total > 0 ? (received / total) * 100 : 0, comReceived, comPending };
 }
 
 function groupByBorrower() {
   const g = {};
   S.loans.forEach(l => {
     const name = (l.borrowerName || "").trim() || "(ไม่ระบุ)";
-    if (!g[name]) g[name] = { name, loans: [], principal: 0, paid: 0, remain: 0, interest: 0, intTotal: 0, totalDue: 0, days: 0, maxDays: 0 };
+    if (!g[name]) g[name] = { name, loans: [], principal: 0, paid: 0, remain: 0, interest: 0, intTotal: 0, comTotal: 0, totalDue: 0, days: 0, maxDays: 0 };
     const c = calcInt(l);
     g[name].loans.push(l);
     g[name].principal += l.amount;
@@ -375,6 +425,7 @@ function groupByBorrower() {
     g[name].remain += c.remain;
     g[name].interest += c.interest || 0;
     g[name].intTotal += c.intTotal || 0;
+    g[name].comTotal += c.comTotal || 0;
     g[name].totalDue += c.totalDue || 0;
     const d = c.daysT || c.periods || daysBetween(l.date, todayStr());
     g[name].days += d;
@@ -398,10 +449,12 @@ function setupLoanForm() {
   const sel = $("#lnIntType");
   if (sel) sel.addEventListener("change", () => {
     const v = sel.value;
-    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly");
+    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
     if (gr) gr.style.display = (v === "daily" || v === "weekly") ? "flex" : "none";
     if (gf) gf.style.display = v === "fixed" ? "flex" : "none";
     if (gfw) gfw.style.display = v === "fixedWeekly" ? "flex" : "none";
+    if (gc) gc.style.display = (v === "fixed" || v === "fixedWeekly") ? "flex" : "none";
+    const pl = $("#comPeriodLabel"); if (pl) pl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
   });
   const d = $("#lnDate"); if (d) d.value = todayStr();
 }
@@ -415,11 +468,12 @@ function handleLoanSubmit(e) {
   const rate = parseFloat($("#lnRate").value) || 0;
   const fixed = parseFloat($("#lnFixed").value) || 0;
   const fixedWeekly = parseFloat($("#lnFixedWeekly").value) || 0;
+  const commission = parseFloat($("#lnCommission").value) || 0;
   const note = ($("#lnNote").value || "").trim();
   if (!borrower || !amount || amount <= 0) return toast("กรุณากรอกชื่อและจำนวนเงิน", "error");
 
   const existing = S.editLoan ? S.loans.find(l => l.id === S.editLoan) : null;
-  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
+  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, commission, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], commissionDailyRecords: existing?.commissionDailyRecords || [], commissionWeeklyRecords: existing?.commissionWeeklyRecords || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
 
   if (S.editLoan) { const idx = S.loans.findIndex(l => l.id === S.editLoan); if (idx >= 0) S.loans[idx] = loan; cancelLoanEdit(); toast("แก้ไขเงินยืมแล้ว"); }
   else { S.loans.push(loan); toast("บันทึกเงินยืมแล้ว"); }
@@ -439,15 +493,18 @@ function editLoan(id) {
 
   // Interest type
   const sel = $("#lnIntType"); if (sel) sel.value = l.interestType || "daily";
-  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly");
+  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
   const v = l.interestType || "daily";
   if (gr) gr.style.display = (v === "daily" || v === "weekly") ? "flex" : "none";
   if (gf) gf.style.display = v === "fixed" ? "flex" : "none";
   if (gfw) gfw.style.display = v === "fixedWeekly" ? "flex" : "none";
+  if (gc) gc.style.display = (v === "fixed" || v === "fixedWeekly") ? "flex" : "none";
+  const pl = $("#comPeriodLabel"); if (pl) pl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
 
   if (v === "daily" || v === "weekly") { $("#lnRate").value = l.interestRate || ""; }
   if (v === "fixed") { $("#lnFixed").value = l.interestFixed || ""; }
   if (v === "fixedWeekly") { $("#lnFixedWeekly").value = l.interestFixedWeekly || ""; }
+  $("#lnCommission").value = l.commission || "";
 
   $("#cancelLnBtn").style.display = "inline-flex";
   $("#loanFormTitle").textContent = "แก้ไขเงินยืม";
@@ -463,10 +520,11 @@ function cancelLoanEdit() {
   const title = $("#loanFormTitle"); if (title) title.textContent = "เพิ่มเงินยืม";
   $("#loanForm").reset(); $("#lnDate").value = todayStr();
   // Reset interest type visibility
-  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly");
+  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
   if (gr) gr.style.display = "flex";
   if (gf) gf.style.display = "none";
   if (gfw) gfw.style.display = "none";
+  if (gc) gc.style.display = "none";
 }
 
 function addPayment(loanId, amtStr) {
@@ -507,20 +565,41 @@ function toggleWeekInt(loanId, weekStart) {
   save(); renderLoans(); updateCharts();
 }
 
+function toggleDayCom(loanId, dateStr) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  loan.commissionDailyRecords = loan.commissionDailyRecords || [];
+  const rec = loan.commissionDailyRecords.find(r => r.date === dateStr);
+  if (rec) rec.received = !rec.received;
+  else loan.commissionDailyRecords.push({ date: dateStr, received: true });
+  save(); renderLoans(); updateCharts();
+}
+
+function toggleWeekCom(loanId, weekStart) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  loan.commissionWeeklyRecords = loan.commissionWeeklyRecords || [];
+  const rec = loan.commissionWeeklyRecords.find(r => r.weekStart === weekStart);
+  if (rec) rec.received = !rec.received;
+  else loan.commissionWeeklyRecords.push({ weekStart, received: true });
+  save(); renderLoans(); updateCharts();
+}
+
 // ── Loan Render ──
 function renderLoans() {
   const list = $("#loanList"); if (!list) return;
 
-  let totalOwed = 0, totalDays = 0, grandIntTotal = 0;
+  let totalOwed = 0, totalDays = 0, grandIntTotal = 0, grandComTotal = 0;
   S.loans.forEach(l => {
     const c = calcInt(l);
     if (c.remain > 0) { totalOwed += c.totalDue; }
     totalDays += c.daysT || c.periods || daysBetween(l.date, todayStr());
     grandIntTotal += c.intTotal || 0;
+    grandComTotal += c.comTotal || 0;
   });
 
   setText("#loanOwed", fmtMoney(totalOwed));
-  setText("#loanTotalInt", fmtMoney(grandIntTotal));
+  setText("#loanTotalInt", fmtMoney(grandIntTotal + grandComTotal));
   setText("#loanCount", S.loans.length);
 
   const groups = groupByBorrower();
@@ -530,7 +609,7 @@ function renderLoans() {
   const tbody = $("#borrowerBody");
   if (tbody) {
     if (groups.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">ยังไม่มีรายการ</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-cell">ยังไม่มีรายการ</td></tr>';
     } else {
       tbody.innerHTML = groups.map(g => `
         <tr class="${g.remain <= 0 ? "paid-row" : ""}">
@@ -541,6 +620,7 @@ function renderLoans() {
           <td>${fmtMoney(g.paid)}</td>
           <td>${fmtMoney(g.remain)}</td>
           <td class="int-cell">${fmtMoney(g.intTotal)}</td>
+          <td class="com-cell">${fmtMoney(g.comTotal)}</td>
           <td class="total-cell">${fmtMoney(g.totalDue)}</td>
         </tr>`).join("");
     }
@@ -553,19 +633,31 @@ function renderLoans() {
     const c = calcInt(loan);
     const isPaid = c.remain <= 0;
     let rateStr = "ไม่มีดอกเบี้ย";
-    if (loan.interestType === "fixed" && loan.interestFixed) rateStr = `${fmtMoney(loan.interestFixed)} บาท/วัน`;
-    else if (loan.interestType === "fixedWeekly" && loan.interestFixedWeekly) rateStr = `${fmtMoney(loan.interestFixedWeekly)} บาท/สัปดาห์`;
-    else if (loan.interestRate) rateStr = `${loan.interestRate}% ${loan.interestType === "weekly" ? "ต่อสัปดาห์" : "ต่อวัน"}`;
+    if (loan.interestType === "fixed" && loan.interestFixed) rateStr = `ดอก ${fmtMoney(loan.interestFixed)}`;
+    else if (loan.interestType === "fixedWeekly" && loan.interestFixedWeekly) rateStr = `ดอก ${fmtMoney(loan.interestFixedWeekly)}/สป.`;
+    else if (loan.interestRate) rateStr = `${loan.interestRate}% ${loan.interestType === "weekly" ? "/สัปดาห์" : "/วัน"}`;
+    if (loan.commission) {
+      const comPer = loan.interestType === "fixedWeekly" ? "/สป." : "/วัน";
+      rateStr += ` · คอม ${fmtMoney(loan.commission)}${comPer}`;
+    }
 
-    // Interest summary badge
+    // Interest + Commission summary badge
     const hasInterest = (c.intRcv > 0 || c.interest > 0 || c.intTotal > 0);
+    const hasCom = (c.comTotal > 0);
     const periodLabel = loan.interestType === "fixedWeekly" ? `(${c.weeksR}/${c.weeksT} สัปดาห์)` : (loan.interestType === "fixed" ? `(${c.daysR}/${c.daysT} วัน)` : "");
-    const intBadge = hasInterest ? `
-      <div class="int-summary">
-        <div class="int-item"><span class="int-label">ได้รับ ${periodLabel}</span><span class="int-val rcv">${fmtMoney(c.intRcv)}</span></div>
-        <div class="int-item"><span class="int-label">ค้างรับ</span><span class="int-val pnd">${fmtMoney(c.interest)}</span></div>
-        <div class="int-item"><span class="int-label">ดอกเบี้ยรวม</span><span class="int-val tot">${fmtMoney(c.intTotal)}</span></div>
-      </div>` : "";
+    const comPeriodLabel = loan.interestType === "fixedWeekly" ? `(${c.comWeeksR}/${c.weeksT} สป.)` : (loan.interestType === "fixed" ? `(${c.comDaysR}/${c.daysT} วัน)` : "");
+    let intBadge = "";
+    if (hasInterest || hasCom) {
+      intBadge = `<div class="int-summary">`;
+      if (hasInterest) {
+        intBadge += `<div class="int-item"><span class="int-label">ดอกเบี้ย ${periodLabel}</span><span class="int-val rcv">${fmtMoney(c.intRcv)} / ${fmtMoney(c.intTotal)}</span></div>`;
+      }
+      if (hasCom) {
+        intBadge += `<div class="int-item"><span class="int-label">คอมฯ ${comPeriodLabel}</span><span class="int-val com">${fmtMoney(c.comRcv)} / ${fmtMoney(c.comTotal)}</span></div>`;
+      }
+      intBadge += `<div class="int-item"><span class="int-label">ค้างรับรวม</span><span class="int-val pnd">${fmtMoney((c.interest || 0) + (c.comUnp || 0))}</span></div>`;
+      intBadge += `</div>`;
+    }
 
     // Daily tracking (fixed บาท/วัน) — เริ่มเก็บวันถัดจากวันที่ให้ยืม
     let dailyHtml = "";
@@ -577,7 +669,21 @@ function renderLoans() {
       dailyHtml = `<div class="daily-section"><div class="daily-title">ดอกเบี้ยรายวัน (14 วันล่าสุด)</div><div class="daily-grid">${days.map(d => {
         const done = !!rcvMap[d];
         const label = new Date(d).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-d="${d}"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.interestFixed)}</span></label>`;
+        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.interestFixed)}</span></label>`;
+      }).join("")}</div></div>`;
+    }
+
+    // Daily commission tracking
+    let dailyComHtml = "";
+    if (!isPaid && loan.interestType === "fixed" && loan.commission) {
+      const cRecs = loan.commissionDailyRecords || [];
+      const cMap = {}; cRecs.forEach(r => { cMap[r.date] = r.received; });
+      const startDay = nextDay(loan.date);
+      const days = startDay <= todayStr() ? dateRange(startDay, todayStr()).slice(-14) : [];
+      dailyComHtml = `<div class="daily-section com-section"><div class="daily-title">คอมมิสชั่นรายวัน (14 วันล่าสุด)</div><div class="daily-grid">${days.map(d => {
+        const done = !!cMap[d];
+        const label = new Date(d).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
+        return `<label class="day-box com-box ${done ? "done" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -594,7 +700,24 @@ function renderLoans() {
         const done = !!wMap[w];
         const wDate = new Date(w);
         const label = wDate.toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-w="${w}"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.interestFixedWeekly)}</span></label>`;
+        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.interestFixedWeekly)}</span></label>`;
+      }).join("")}</div></div>`;
+    }
+
+    // Weekly commission tracking
+    let weeklyComHtml = "";
+    if (!isPaid && loan.interestType === "fixedWeekly" && loan.commission) {
+      const cRecs = loan.commissionWeeklyRecords || [];
+      const cMap = {}; cRecs.forEach(r => { cMap[r.weekStart] = r.received; });
+      const wStart = nextDay(loan.date);
+      const wEndDate = new Date(); wEndDate.setDate(wEndDate.getDate() + 6);
+      const wEndStr = localDateStr(wEndDate);
+      const weeks = wStart <= wEndStr ? weekStarts(wStart, wEndStr).slice(-10) : [];
+      weeklyComHtml = `<div class="daily-section com-section"><div class="daily-title">คอมมิสชั่นรายสัปดาห์ (10 สัปดาห์ล่าสุด)</div><div class="daily-grid">${weeks.map((w, i) => {
+        const done = !!cMap[w];
+        const wDate = new Date(w);
+        const label = wDate.toLocaleDateString("th-TH",{day:"numeric",month:"short"});
+        return `<label class="day-box com-box ${done ? "done" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -607,7 +730,9 @@ function renderLoans() {
         <div class="loan-meta-line">เงินต้น ${fmtMoney(loan.amount)} · ${fmtDate(loan.date)} · ${rateStr}${loan.note ? " · " + esc(loan.note) : ""}</div>
         ${intBadge}
         ${dailyHtml}
+        ${dailyComHtml}
         ${weeklyHtml}
+        ${weeklyComHtml}
         ${!isPaid ? `<div class="pay-row"><input type="number" placeholder="จำนวนชำระเงินต้น" min="0" step="0.01" class="pay-inp" data-lid="${loan.id}"/><button class="btn btn-sm btn-green pay-btn" data-lid="${loan.id}">ชำระ</button></div>` : ""}
         <div class="loan-bottom"><button class="btn btn-icon edit-loan" data-lid="${loan.id}" title="แก้ไข">✎</button><button class="btn btn-icon del-loan" data-lid="${loan.id}" title="ลบ">✕</button></div>
       </div>`;
@@ -619,8 +744,9 @@ function renderLoans() {
   list.querySelectorAll(".day-box").forEach(lbl => {
     const cb = lbl.querySelector('input[type="checkbox"]');
     if (cb) cb.addEventListener("change", () => {
-      if (lbl.dataset.w) toggleWeekInt(lbl.dataset.lid, lbl.dataset.w);
-      else toggleDayInt(lbl.dataset.lid, lbl.dataset.d);
+      const isCom = lbl.dataset.ct === "com";
+      if (lbl.dataset.w) { isCom ? toggleWeekCom(lbl.dataset.lid, lbl.dataset.w) : toggleWeekInt(lbl.dataset.lid, lbl.dataset.w); }
+      else { isCom ? toggleDayCom(lbl.dataset.lid, lbl.dataset.d) : toggleDayInt(lbl.dataset.lid, lbl.dataset.d); }
     });
   });
 }
