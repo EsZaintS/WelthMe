@@ -898,7 +898,7 @@ function renderAgent() {
         ? (loan.interestWeeklyRecords || []).some(r => r.weekStart === dateKey && r.received)
         : (loan.interestDailyRecords || []).some(r => r.date === dateKey && r.received);
       const transferred = collected && isTransferred(loan, dateKey);
-      const item = { loan, investor: inv, date: dateKey, intAmt, com, rate, collected, transferred, isWeekly };
+      const item = { loan, investor: inv, date: dateKey, intAmt, com, rate, collected, transferred, isWeekly, isOverdue: isPast };
 
       investorTotals[inv].count++;
       investorTotals[inv].total += rate;
@@ -958,7 +958,7 @@ function renderAgent() {
     if (todaySection.length === 0) {
       todayList.innerHTML = '<div class="empty-state"><p>ไม่มีรายการวันนี้</p></div>';
     } else {
-      todayList.innerHTML = Object.entries(todayByInv).map(([inv, items]) => {
+      const groupsHtml = Object.entries(todayByInv).map(([inv, items]) => {
         const collected = items.filter(i => i.collected);
         const invComTotal = collected.reduce((s, i) => s + i.com, 0);
         const invTransTotal = collected.reduce((s, i) => s + i.rate, 0);
@@ -966,6 +966,7 @@ function renderAgent() {
           const dateLabel = i.isWeekly
             ? `สป. ${new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"})}`
             : new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
+          const overdueTag = i.isOverdue ? `<span class="agent-overdue-tag">ค้างชำระ</span>` : "";
           let actionHtml;
           if (!i.collected) {
             actionHtml = `<button class="btn btn-sm btn-green agent-collect-btn" data-lid="${i.loan.id}" data-d="${i.date}" data-weekly="${!!i.isWeekly}">เก็บดอก</button>`;
@@ -975,7 +976,7 @@ function renderAgent() {
             actionHtml = `<span class="agent-status confirmed">✓ โอนแล้ว</span>`;
           }
           return `<div class="agent-row ${i.transferred ? "transferred" : (i.collected ? "confirmed" : "pending")}">
-            <span class="agent-borrower">${esc(i.loan.borrowerName)}</span>
+            <span class="agent-borrower">${esc(i.loan.borrowerName)}${overdueTag}</span>
             <span class="agent-date">${dateLabel}</span>
             <span class="agent-amount">ดอก ${fmtMoney(i.intAmt)}</span>
             <span class="agent-detail">คอม ${fmtMoney(i.com)} · โอน ${fmtMoney(i.rate)}</span>
@@ -987,6 +988,14 @@ function renderAgent() {
           ${rows}
         </div>`;
       }).join("");
+
+      const totalSummary = `<div class="agent-today-total">
+        <div class="agent-total-row"><span>ดอกเบี้ยที่เก็บได้</span><strong>${fmtMoney(intToday)}</strong></div>
+        <div class="agent-total-row"><span>คอมฯ นายหน้า</span><strong class="com">${fmtMoney(comToday)}</strong></div>
+        <div class="agent-total-row"><span>ต้องโอน Investor</span><strong class="transfer">${fmtMoney(transferToday)}</strong></div>
+      </div>`;
+
+      todayList.innerHTML = groupsHtml + totalSummary;
       todayList.querySelectorAll(".agent-collect-btn").forEach(b => {
         b.addEventListener("click", () => {
           if (b.dataset.weekly === "true") toggleWeekInt(b.dataset.lid, b.dataset.d);
