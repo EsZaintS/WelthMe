@@ -11,7 +11,6 @@ const CATEGORIES = {
 };
 
 const S = { tx: [], loans: [], openBal: 0, curType: "income", editTx: null, editLoan: null, charts: {} };
-let _debugCollect = false, _debugLid = "", _debugDate = "";
 
 // ── Helpers ──
 const $ = (sel) => document.querySelector(sel);
@@ -39,7 +38,21 @@ function toast(msg, type = "success") {
 // ── Storage ──
 function load() {
   try { S.tx = JSON.parse(localStorage.getItem(KEYS.tx)) || []; } catch { S.tx = []; }
-  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; if (!l.investorTransfers) l.investorTransfers = []; if (l.investor === undefined) l.investor = ""; }); } catch { S.loans = []; }
+  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => {
+    if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = [];
+    if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = [];
+    if (!l.commissionDailyRecords) l.commissionDailyRecords = [];
+    if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = [];
+    if (!l.investorTransfers) l.investorTransfers = [];
+    if (l.investor === undefined) l.investor = "";
+    (l.investorTransfers || []).forEach(t => {
+      if (!t.confirmed) return;
+      const intRcv = l.interestType === "fixed"
+        ? (l.interestDailyRecords || []).some(r => r.date === t.date && r.received)
+        : (l.interestWeeklyRecords || []).some(r => r.weekStart === t.date && r.received);
+      if (!intRcv) t.confirmed = false;
+    });
+  }); } catch { S.loans = []; }
   try { S.openBal = parseFloat(localStorage.getItem(KEYS.opening)) || 0; } catch { S.openBal = 0; }
 }
 function save() {
@@ -688,9 +701,10 @@ function collectDayInt(loanId, dateStr) {
   const rec = loan.interestDailyRecords.find(r => r.date === dateStr);
   if (rec) { if (rec.received) { toast("เก็บแล้ว","info"); return; } rec.received = true; }
   else loan.interestDailyRecords.push({ date: dateStr, received: true });
+  const oldTransfer = (loan.investorTransfers || []).find(t => t.date === dateStr);
+  if (oldTransfer) oldTransfer.confirmed = false;
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
-  _debugCollect = true; _debugLid = loanId; _debugDate = dateStr;
   save();
   try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
   try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
@@ -705,9 +719,10 @@ function collectWeekInt(loanId, weekStart) {
   const rec = loan.interestWeeklyRecords.find(r => r.weekStart === weekStart);
   if (rec) { if (rec.received) { toast("เก็บแล้ว","info"); return; } rec.received = true; }
   else loan.interestWeeklyRecords.push({ weekStart, received: true });
+  const oldTransfer = (loan.investorTransfers || []).find(t => t.date === weekStart);
+  if (oldTransfer) oldTransfer.confirmed = false;
   const com = Number(loan.commission) || 0;
   const rate = calcInvestorRate(loan);
-  _debugCollect = true;
   save();
   try { renderLoans(); } catch(e) { console.error("renderLoans:", e); }
   try { renderAgent(); } catch(e) { console.error("renderAgent:", e); }
@@ -1003,19 +1018,6 @@ function renderAgent() {
     }
   });
   overdueSection.forEach(i => { totalOverdue += i.intAmt; });
-  console.log("[renderAgent]", { todayCount: todaySection.length, overdueCount: overdueSection.length, intToday, comToday, transferToday, totalOverdue, todayItems: todaySection.map(i => ({ borrower: i.loan.borrowerName, date: i.date, collected: i.collected, isOverdue: i.isOverdue })) });
-  if (_debugCollect) {
-    _debugCollect = false;
-    const dbgLoan = S.loans.find(l => l.id === _debugLid);
-    const dbgInv = dbgLoan ? (dbgLoan.investor||"").trim() : "NO LOAN";
-    const dbgType = dbgLoan ? dbgLoan.interestType : "?";
-    const dbgRec = dbgLoan ? (dbgLoan.interestDailyRecords||[]).find(r => r.date === _debugDate) : null;
-    const dbgInList = invLoans.some(l => l.id === _debugLid);
-    const dbgText = JSON.stringify({todaySection:todaySection.length,overdueCollected:todaySection.filter(i=>i.isOverdue&&i.collected).length,overdueLeft:overdueSection.length,loanId:_debugLid,date:_debugDate,investor:dbgInv,type:dbgType,record:dbgRec,inInvLoans:dbgInList,today}, null, 2);
-    const w = window.open("", "debug", "width=500,height=400");
-    if (w) { w.document.write(`<pre style="font:14px monospace;padding:16px;background:#111;color:#0f0;word-wrap:break-word">${dbgText}</pre>`); w.document.title = "Debug"; }
-    else prompt("Copy debug info:", dbgText);
-  }
   setText("#agentIntToday", fmtMoney(intToday));
   setText("#agentComToday", fmtMoney(comToday));
   setText("#agentTransferToday", fmtMoney(transferToday));
