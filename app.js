@@ -739,8 +739,38 @@ function renderLoans() {
       const comPer = loan.interestType === "fixedWeekly" ? "/สป." : "/วัน";
       rateStr += ` · คอม ${fmtMoney(loan.commission)}${comPer}`;
     }
+    const today = todayStr();
     const invRate = calcInvestorRate(loan);
-    const investorStr = (loan.investor || "").trim() ? ` · ทุน: ${esc(loan.investor)}` + (invRate > 0 ? ` (โอน Investor ${fmtMoney(invRate)}${loan.interestType === "fixedWeekly" ? "/สป." : "/วัน"})` : "") : "";
+    const hasInv = (loan.investor || "").trim();
+    const perLabel = loan.interestType === "fixedWeekly" ? "/สป." : "/วัน";
+
+    // Investor badge
+    let investorBadge = "";
+    if (hasInv) {
+      investorBadge = `<div class="loan-investor-tag"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>${esc(loan.investor)}${invRate > 0 ? ` · โอน ${fmtMoney(invRate)}${perLabel}` : ""}</div>`;
+    }
+
+    // Today's collection status for investor loans
+    let todayAgentHtml = "";
+    if (hasInv && !isPaid && invRate > 0) {
+      let todayCollected = false;
+      if (loan.interestType === "fixed") {
+        todayCollected = (loan.interestDailyRecords || []).some(r => r.date === today && r.received);
+      } else if (loan.interestType === "fixedWeekly") {
+        const ws = nextDay(loan.date);
+        const we = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+        const wks = ws <= we ? weekStarts(ws, we) : [];
+        const curW = wks.find(w => { const e = (() => { const d = new Date(w); d.setDate(d.getDate()+6); return localDateStr(d); })(); return w <= today && e >= today; });
+        if (curW) todayCollected = (loan.interestWeeklyRecords || []).some(r => r.weekStart === curW && r.received);
+      }
+      const tCom = todayCollected ? (Number(loan.commission) || 0) : 0;
+      const tTransfer = todayCollected ? invRate : 0;
+      todayAgentHtml = `<div class="today-agent-summary${todayCollected ? " collected" : ""}">
+        <div class="today-agent-item"><span>คอมฯ วันนี้</span><span class="today-val com">${fmtMoney(tCom)}</span></div>
+        <div class="today-agent-item"><span>โอน ${esc(loan.investor)} วันนี้</span><span class="today-val transfer">${fmtMoney(tTransfer)}</span></div>
+        <div class="today-agent-item"><span>สถานะ</span><span class="today-val ${todayCollected ? "com" : "pending"}">${todayCollected ? "✓ เก็บแล้ว" : "ยังไม่เก็บ"}</span></div>
+      </div>`;
+    }
 
     // Interest + Commission summary badge
     const hasInterest = (c.intRcv > 0 || c.interest > 0 || c.intTotal > 0);
@@ -760,8 +790,6 @@ function renderLoans() {
       intBadge += `</div>`;
     }
 
-    // Daily tracking (fixed บาท/วัน) — เริ่มเก็บวันถัดจากวันที่ให้ยืม
-    const today = todayStr();
     let dailyHtml = "";
     if (!isPaid && loan.interestType === "fixed" && loan.interestFixed) {
       const recs = loan.interestDailyRecords || [];
@@ -796,13 +824,15 @@ function renderLoans() {
     }
 
     return `
-      <div class="loan-card ${isPaid ? "is-paid" : ""}" data-id="${loan.id}">
+      <div class="loan-card ${isPaid ? "is-paid" : ""}${hasInv ? " has-investor" : ""}" data-id="${loan.id}">
         <div class="loan-top">
           <span class="loan-name">${esc(loan.borrowerName)}</span>
           <span class="loan-due">${isPaid ? "✓ ชำระแล้ว" : fmtMoney(c.totalDue) + " บาท"}</span>
         </div>
-        <div class="loan-meta-line">เงินต้น ${fmtMoney(loan.amount)} · ${fmtDate(loan.date)} · ${rateStr}${investorStr}${loan.note ? " · " + esc(loan.note) : ""}</div>
+        ${investorBadge}
+        <div class="loan-meta-line">เงินต้น ${fmtMoney(loan.amount)} · ${fmtDate(loan.date)} · ${rateStr}${loan.note ? " · " + esc(loan.note) : ""}</div>
         ${intBadge}
+        ${todayAgentHtml}
         ${dailyHtml}
         ${weeklyHtml}
         ${!isPaid ? `<div class="pay-row"><input type="number" placeholder="จำนวนชำระเงินต้น" min="0" step="0.01" class="pay-inp" data-lid="${loan.id}"/><button class="btn btn-sm btn-green pay-btn" data-lid="${loan.id}">ชำระ</button></div>` : ""}
