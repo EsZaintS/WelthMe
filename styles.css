@@ -760,6 +760,7 @@ body {
 .agent-borrower { font-weight: 600; color: var(--t1); }
 .agent-date { color: var(--t3); font-size: .76rem; }
 .agent-amount { font-family: var(--mono); font-weight: 600; color: var(--t1); }
+.agent-detail { font-family: var(--mono); font-size: .72rem; color: var(--t3); white-space: nowrap; }
 .agent-status { font-size: .72rem; font-weight: 600; padding: .15rem .45rem; border-radius: 4px; white-space: nowrap; }
 
 .agent-row.confirmed .agent-status { color: var(--green); background: var(--green-soft); }
@@ -768,6 +769,7 @@ body {
 
 .agent-row.overdue-row {
   background: rgba(239,68,68,.04);
+  grid-template-columns: auto auto 1fr auto;
 }
 
 .agent-loan-block {
@@ -810,7 +812,9 @@ body {
     grid-template-columns: 1fr auto auto;
     gap: .35rem;
   }
+  .agent-detail { display: none; }
   .agent-status { display: none; }
+  .agent-row.overdue-row { grid-template-columns: auto 1fr auto; }
   .agent-date { font-size: .7rem; }
 }
 

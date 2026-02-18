@@ -223,13 +223,14 @@
       <section class="page" id="page-agent">
         <div class="page-header">
           <h1>นายหน้า</h1>
-          <p class="page-sub">สรุปยอดโอน Investor · ยืนยันการโอน · ค้างชำระ</p>
+          <p class="page-sub">เก็บดอกเบี้ย · คอมมิสชั่น · โอน Investor</p>
         </div>
 
-        <div class="kpi-row kpi-row--3">
-          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ต้องโอนวันนี้</span><span class="kpi-value" id="agentDueToday">0.00</span></div></div>
-          <div class="kpi green"><div class="kpi-body"><span class="kpi-label">โอนแล้ววันนี้</span><span class="kpi-value" id="agentPaidToday">0.00</span></div></div>
-          <div class="kpi red"><div class="kpi-body"><span class="kpi-label">ค้างโอนทั้งหมด</span><span class="kpi-value" id="agentOverdue">0.00</span></div></div>
+        <div class="kpi-row">
+          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ดอกเบี้ยวันนี้</span><span class="kpi-value" id="agentIntToday">0.00</span></div></div>
+          <div class="kpi green"><div class="kpi-body"><span class="kpi-label">คอมฯ วันนี้</span><span class="kpi-value" id="agentComToday">0.00</span></div></div>
+          <div class="kpi blue"><div class="kpi-body"><span class="kpi-label">โอน Investor วันนี้</span><span class="kpi-value" id="agentTransferToday">0.00</span></div></div>
+          <div class="kpi red"><div class="kpi-body"><span class="kpi-label">ค้างเก็บทั้งหมด</span><span class="kpi-value" id="agentOverdue">0.00</span></div></div>
         </div>
 
         <div class="card">
@@ -238,7 +239,7 @@
         </div>
 
         <div class="card">
-          <div class="card-head"><h3>ค้างโอน (เลยกำหนด)</h3></div>
+          <div class="card-head"><h3>ค้างเก็บดอกเบี้ย (เลยกำหนด)</h3></div>
           <div id="agentOverdueList"></div>
         </div>
 
