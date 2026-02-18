@@ -49,6 +49,10 @@
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
             เงินยืม
           </button>
+          <button class="tab" data-tab="agent">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+            นายหน้า
+          </button>
         </nav>
       </div>
     </header>
@@ -164,10 +168,10 @@
         </div>
 
         <div class="kpi-row">
-          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ค้างชำระรวม</span><span class="kpi-value" id="loanOwed">0.00</span></div></div>
+          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ค้างชำระ (ทุนตัวเอง)</span><span class="kpi-value" id="loanOwedOwn">0.00</span></div></div>
+          <div class="kpi red"><div class="kpi-body"><span class="kpi-label">ค้างชำระ (Investor)</span><span class="kpi-value" id="loanOwedInv">0.00</span></div></div>
           <div class="kpi green"><div class="kpi-body"><span class="kpi-label">ดอกเบี้ยรวม</span><span class="kpi-value" id="loanTotalInt">0.00</span></div></div>
           <div class="kpi"><div class="kpi-body"><span class="kpi-label">รายการ</span><span class="kpi-value" id="loanCount">0</span></div></div>
-          <div class="kpi"><div class="kpi-body"><span class="kpi-label">ผู้ยืม</span><span class="kpi-value" id="loanPeople">0</span></div></div>
         </div>
 
         <div class="card">
@@ -199,6 +203,8 @@
             <div class="field" id="grpFixed" style="display:none"><label>ดอกเบี้ย (บาท/วัน)</label><input type="number" id="lnFixed" placeholder="100" min="0" step="0.01" /></div>
             <div class="field" id="grpFixedWeekly" style="display:none"><label>ดอกเบี้ย (บาท/สัปดาห์)</label><input type="number" id="lnFixedWeekly" placeholder="500" min="0" step="0.01" /></div>
             <div class="field" id="grpCommission" style="display:none"><label>คอมมิสชั่น (บาท/<span id="comPeriodLabel">วัน</span>)</label><input type="number" id="lnCommission" placeholder="0" min="0" step="0.01" /></div>
+            <div class="field field-autocomplete"><label>เจ้าของทุน (ไม่ใส่ = ทุนตัวเอง)</label><input type="text" id="lnInvestor" placeholder="ชื่อ Investor" autocomplete="off" /><div class="ac-dropdown" id="investorDropdown"></div></div>
+            <div class="field" id="grpInvRate" style="display:none"><label>จ่าย Investor (บาท/<span id="invPeriodLabel">วัน</span>)</label><input type="number" id="lnInvRate" placeholder="0" min="0" step="0.01" /></div>
             <div class="field span-full"><label>หมายเหตุ</label><input type="text" id="lnNote" placeholder="เช่น ยืมไปซื้อของ" /></div>
             <div class="field field-actions">
               <button type="submit" class="btn btn-amber">บันทึกเงินยืม</button>
@@ -210,6 +216,40 @@
         <div class="card">
           <div class="card-head"><h3>รายการเงินยืม</h3></div>
           <div class="loan-list" id="loanList"></div>
+        </div>
+      </section>
+
+      <!-- ===================== AGENT ===================== -->
+      <section class="page" id="page-agent">
+        <div class="page-header">
+          <h1>นายหน้า</h1>
+          <p class="page-sub">สรุปยอดโอน Investor · ยืนยันการโอน · ค้างชำระ</p>
+        </div>
+
+        <div class="kpi-row kpi-row--3">
+          <div class="kpi amber"><div class="kpi-body"><span class="kpi-label">ต้องโอนวันนี้</span><span class="kpi-value" id="agentDueToday">0.00</span></div></div>
+          <div class="kpi green"><div class="kpi-body"><span class="kpi-label">โอนแล้ววันนี้</span><span class="kpi-value" id="agentPaidToday">0.00</span></div></div>
+          <div class="kpi red"><div class="kpi-body"><span class="kpi-label">ค้างโอนทั้งหมด</span><span class="kpi-value" id="agentOverdue">0.00</span></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>รายการวันนี้</h3></div>
+          <div id="agentTodayList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>ค้างโอน (เลยกำหนด)</h3></div>
+          <div id="agentOverdueList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>สรุปรวมตาม Investor</h3></div>
+          <div class="table-scroll">
+            <table class="tbl" id="investorSummaryTable">
+              <thead><tr><th>Investor</th><th>รายการ</th><th>โอนแล้ว</th><th>ค้างโอน</th><th>รวมทั้งหมด</th></tr></thead>
+              <tbody id="investorSummaryBody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 

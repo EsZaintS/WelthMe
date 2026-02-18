@@ -638,6 +638,20 @@ body {
 
 .int-val.com { color: var(--amber); }
 
+/* Overdue day-box */
+.day-box.overdue {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+.day-box.overdue .dlabel,
+.day-box.overdue .damount { color: var(--red); }
+.day-box.com-box.overdue {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+.day-box.com-box.overdue .dlabel,
+.day-box.com-box.overdue .damount { color: var(--red); }
+
 /* Payment inline */
 .pay-row {
   display: flex; gap: .5rem; align-items: center;
@@ -694,6 +708,78 @@ body {
 @keyframes toastOut { to { opacity: 0; transform: translateX(20px); } }
 
 /* ============================== */
+/*  Agent tab                     */
+/* ============================== */
+.agent-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: .65rem;
+  overflow: hidden;
+}
+.agent-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .65rem .85rem;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+}
+.agent-inv-name {
+  font-weight: 700;
+  font-size: .92rem;
+  color: var(--t1);
+}
+.agent-inv-total {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: .88rem;
+  color: var(--amber);
+}
+.agent-inv-total.overdue-total { color: var(--red); }
+
+.agent-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  gap: .5rem;
+  align-items: center;
+  padding: .5rem .85rem;
+  font-size: .82rem;
+  border-bottom: 1px solid var(--border);
+}
+.agent-row:last-child { border-bottom: none; }
+.agent-borrower { font-weight: 600; color: var(--t1); }
+.agent-date { color: var(--t3); font-size: .76rem; }
+.agent-amount { font-family: var(--mono); font-weight: 600; color: var(--t1); }
+.agent-status { font-size: .72rem; font-weight: 600; padding: .15rem .45rem; border-radius: 4px; white-space: nowrap; }
+
+.agent-row.confirmed .agent-status { color: var(--green); background: var(--green-soft); }
+.agent-row.pending .agent-status { color: var(--amber); background: var(--amber-soft); }
+.agent-row.not-collected .agent-status { color: var(--red); background: var(--red-soft); }
+
+.agent-row.overdue-row {
+  background: rgba(239,68,68,.04);
+}
+
+.agent-loan-block {
+  border-bottom: 1px solid var(--border);
+}
+.agent-loan-block:last-child { border-bottom: none; }
+.agent-loan-info {
+  padding: .5rem .85rem;
+  font-size: .8rem;
+  color: var(--t2);
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--border);
+}
+.agent-loan-info strong { color: var(--t1); }
+
+.overdue-group .agent-group-head {
+  background: rgba(239,68,68,.08);
+}
+
+.tbl .com-cell { font-weight: 600; color: var(--amber); font-family: var(--mono); }
+
+/* ============================== */
 /*  Responsive                    */
 /* ============================== */
 @media (max-width: 700px) {
@@ -710,6 +796,12 @@ body {
     gap: .4rem;
   }
   .tx-cat, .tx-balance { display: none; }
+  .agent-row {
+    grid-template-columns: 1fr auto auto;
+    gap: .35rem;
+  }
+  .agent-status { display: none; }
+  .agent-date { font-size: .7rem; }
 }
 
 @media (max-width: 420px) {

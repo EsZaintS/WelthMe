@@ -38,7 +38,7 @@ function toast(msg, type = "success") {
 // ── Storage ──
 function load() {
   try { S.tx = JSON.parse(localStorage.getItem(KEYS.tx)) || []; } catch { S.tx = []; }
-  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; }); } catch { S.loans = []; }
+  try { S.loans = JSON.parse(localStorage.getItem(KEYS.loans)) || []; S.loans.forEach(l => { if (l.interestType === "fixed" && !l.interestDailyRecords) l.interestDailyRecords = []; if (l.interestType === "fixedWeekly" && !l.interestWeeklyRecords) l.interestWeeklyRecords = []; if (!l.commissionDailyRecords) l.commissionDailyRecords = []; if (!l.commissionWeeklyRecords) l.commissionWeeklyRecords = []; if (!l.investorTransfers) l.investorTransfers = []; if (l.investor === undefined) l.investor = ""; if (l.investorRate === undefined) l.investorRate = 0; }); } catch { S.loans = []; }
   try { S.openBal = parseFloat(localStorage.getItem(KEYS.opening)) || 0; } catch { S.openBal = 0; }
 }
 function save() {
@@ -57,6 +57,7 @@ function setupNav() {
       const page = $(`#page-${btn.dataset.tab}`);
       if (page) page.classList.add("active");
       if (btn.dataset.tab === "dashboard") updateCharts();
+      if (btn.dataset.tab === "agent") renderAgent();
     });
   });
 }
@@ -480,21 +481,56 @@ function fillBorrowerList() {
   inp.addEventListener("blur", () => { setTimeout(() => { dd.style.display = "none"; }, 150); });
 }
 
+function getInvestorNames() {
+  return [...new Set(S.loans.map(l => (l.investor || "").trim()).filter(Boolean))].sort();
+}
+
+function fillInvestorList() {
+  const inp = $("#lnInvestor"), dd = $("#investorDropdown");
+  if (!inp || !dd || inp._acReady) return;
+  inp._acReady = true;
+
+  function showDD() {
+    const names = getInvestorNames();
+    const q = (inp.value || "").trim().toLowerCase();
+    const filtered = q ? names.filter(n => n.toLowerCase().includes(q)) : names;
+    if (filtered.length === 0) { dd.style.display = "none"; return; }
+    dd.innerHTML = filtered.map(n => `<div class="ac-item">${esc(n)}</div>`).join("");
+    dd.style.display = "block";
+    dd.querySelectorAll(".ac-item").forEach(item => {
+      item.addEventListener("mousedown", (e) => { e.preventDefault(); inp.value = item.textContent; dd.style.display = "none"; });
+    });
+  }
+
+  inp.addEventListener("focus", showDD);
+  inp.addEventListener("input", showDD);
+  inp.addEventListener("blur", () => { setTimeout(() => { dd.style.display = "none"; }, 150); });
+}
+
 function setupLoanForm() {
   const form = $("#loanForm"); if (!form) return;
   form.addEventListener("submit", handleLoanSubmit);
   const cancel = $("#cancelLnBtn"); if (cancel) cancel.addEventListener("click", cancelLoanEdit);
   fillBorrowerList();
+  fillInvestorList();
   const sel = $("#lnIntType");
-  if (sel) sel.addEventListener("change", () => {
+  function updateLoanFieldVisibility() {
     const v = sel.value;
-    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
+    const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission"), gi = $("#grpInvRate");
     if (gr) gr.style.display = (v === "daily" || v === "weekly") ? "flex" : "none";
     if (gf) gf.style.display = v === "fixed" ? "flex" : "none";
     if (gfw) gfw.style.display = v === "fixedWeekly" ? "flex" : "none";
     if (gc) gc.style.display = (v === "fixed" || v === "fixedWeekly") ? "flex" : "none";
     const pl = $("#comPeriodLabel"); if (pl) pl.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
-  });
+    const hasInvestor = ($("#lnInvestor").value || "").trim() !== "";
+    const isFixed = (v === "fixed" || v === "fixedWeekly");
+    if (gi) gi.style.display = (hasInvestor && isFixed) ? "flex" : "none";
+    const ip = $("#invPeriodLabel"); if (ip) ip.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
+  }
+  if (sel) sel.addEventListener("change", updateLoanFieldVisibility);
+  const invInp = $("#lnInvestor");
+  if (invInp) invInp.addEventListener("input", updateLoanFieldVisibility);
+  if (invInp) invInp.addEventListener("blur", () => setTimeout(updateLoanFieldVisibility, 200));
   const d = $("#lnDate"); if (d) d.value = todayStr();
 }
 
@@ -511,13 +547,16 @@ function handleLoanSubmit(e) {
   const note = ($("#lnNote").value || "").trim();
   if (!borrower || !amount || amount <= 0) return toast("กรุณากรอกชื่อและจำนวนเงิน", "error");
 
+  const investor = ($("#lnInvestor").value || "").trim();
+  const investorRate = parseFloat($("#lnInvRate").value) || 0;
+
   const existing = S.editLoan ? S.loans.find(l => l.id === S.editLoan) : null;
-  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, commission, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], commissionDailyRecords: existing?.commissionDailyRecords || [], commissionWeeklyRecords: existing?.commissionWeeklyRecords || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
+  const loan = { id: S.editLoan || uid(), borrowerName: borrower, amount, date, interestType: intType, interestRate: rate, interestFixed: fixed, interestFixedWeekly: fixedWeekly, commission, investor, investorRate, interestDailyRecords: existing?.interestDailyRecords || [], interestWeeklyRecords: existing?.interestWeeklyRecords || [], commissionDailyRecords: existing?.commissionDailyRecords || [], commissionWeeklyRecords: existing?.commissionWeeklyRecords || [], investorTransfers: existing?.investorTransfers || [], note, payments: existing?.payments || [], createdAt: existing?.createdAt || Date.now() };
 
   if (S.editLoan) { const idx = S.loans.findIndex(l => l.id === S.editLoan); if (idx >= 0) S.loans[idx] = loan; cancelLoanEdit(); toast("แก้ไขเงินยืมแล้ว"); }
   else { S.loans.push(loan); toast("บันทึกเงินยืมแล้ว"); }
 
-  save(); renderLoans(); updateCharts(); fillBorrowerList();
+  save(); renderLoans(); renderAgent(); updateCharts(); fillBorrowerList(); fillInvestorList();
   $("#loanForm").reset(); $("#lnDate").value = todayStr();
 }
 
@@ -544,6 +583,13 @@ function editLoan(id) {
   if (v === "fixed") { $("#lnFixed").value = l.interestFixed || ""; }
   if (v === "fixedWeekly") { $("#lnFixedWeekly").value = l.interestFixedWeekly || ""; }
   $("#lnCommission").value = l.commission || "";
+  $("#lnInvestor").value = l.investor || "";
+  $("#lnInvRate").value = l.investorRate || "";
+  const gi = $("#grpInvRate");
+  const hasInv = (l.investor || "").trim() !== "";
+  const isFixed = (v === "fixed" || v === "fixedWeekly");
+  if (gi) gi.style.display = (hasInv && isFixed) ? "flex" : "none";
+  const ip = $("#invPeriodLabel"); if (ip) ip.textContent = v === "fixedWeekly" ? "สัปดาห์" : "วัน";
 
   $("#cancelLnBtn").style.display = "inline-flex";
   $("#loanFormTitle").textContent = "แก้ไขเงินยืม";
@@ -558,12 +604,12 @@ function cancelLoanEdit() {
   const btn = $("#cancelLnBtn"); if (btn) btn.style.display = "none";
   const title = $("#loanFormTitle"); if (title) title.textContent = "เพิ่มเงินยืม";
   $("#loanForm").reset(); $("#lnDate").value = todayStr();
-  // Reset interest type visibility
-  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission");
+  const gr = $("#grpRate"), gf = $("#grpFixed"), gfw = $("#grpFixedWeekly"), gc = $("#grpCommission"), gi = $("#grpInvRate");
   if (gr) gr.style.display = "flex";
   if (gf) gf.style.display = "none";
   if (gfw) gfw.style.display = "none";
   if (gc) gc.style.display = "none";
+  if (gi) gi.style.display = "none";
 }
 
 function addPayment(loanId, amtStr) {
@@ -574,14 +620,14 @@ function addPayment(loanId, amtStr) {
   const pay = Math.min(amount, loan.amount - paid);
   loan.payments = loan.payments || [];
   loan.payments.push({ amount: pay, date: todayStr() });
-  save(); renderLoans(); updateCharts();
+  save(); renderLoans(); renderAgent(); updateCharts();
   toast(`รับชำระ ${fmtMoney(pay)} บาท`);
 }
 
 function deleteLoan(id) {
   if (!confirm("ลบรายการเงินยืมนี้?")) return;
   S.loans = S.loans.filter(l => l.id !== id);
-  save(); renderLoans(); updateCharts(); fillBorrowerList(); toast("ลบรายการแล้ว");
+  save(); renderLoans(); renderAgent(); updateCharts(); fillBorrowerList(); toast("ลบรายการแล้ว");
 }
 
 function toggleDayInt(loanId, dateStr) {
@@ -591,7 +637,7 @@ function toggleDayInt(loanId, dateStr) {
   const rec = loan.interestDailyRecords.find(r => r.date === dateStr);
   if (rec) rec.received = !rec.received;
   else loan.interestDailyRecords.push({ date: dateStr, received: true });
-  save(); renderLoans(); updateCharts();
+  save(); renderLoans(); renderAgent(); updateCharts();
 }
 
 function toggleWeekInt(loanId, weekStart) {
@@ -601,7 +647,7 @@ function toggleWeekInt(loanId, weekStart) {
   const rec = loan.interestWeeklyRecords.find(r => r.weekStart === weekStart);
   if (rec) rec.received = !rec.received;
   else loan.interestWeeklyRecords.push({ weekStart, received: true });
-  save(); renderLoans(); updateCharts();
+  save(); renderLoans(); renderAgent(); updateCharts();
 }
 
 function toggleDayCom(loanId, dateStr) {
@@ -611,7 +657,7 @@ function toggleDayCom(loanId, dateStr) {
   const rec = loan.commissionDailyRecords.find(r => r.date === dateStr);
   if (rec) rec.received = !rec.received;
   else loan.commissionDailyRecords.push({ date: dateStr, received: true });
-  save(); renderLoans(); updateCharts();
+  save(); renderLoans(); renderAgent(); updateCharts();
 }
 
 function toggleWeekCom(loanId, weekStart) {
@@ -621,28 +667,30 @@ function toggleWeekCom(loanId, weekStart) {
   const rec = loan.commissionWeeklyRecords.find(r => r.weekStart === weekStart);
   if (rec) rec.received = !rec.received;
   else loan.commissionWeeklyRecords.push({ weekStart, received: true });
-  save(); renderLoans(); updateCharts();
+  save(); renderLoans(); renderAgent(); updateCharts();
 }
 
 // ── Loan Render ──
 function renderLoans() {
   const list = $("#loanList"); if (!list) return;
 
-  let totalOwed = 0, totalDays = 0, grandIntTotal = 0, grandComTotal = 0;
+  let owedOwn = 0, owedInv = 0, grandIntTotal = 0, grandComTotal = 0;
   S.loans.forEach(l => {
     const c = calcInt(l);
-    if (c.remain > 0) { totalOwed += c.totalDue; }
-    totalDays += c.daysT || c.periods || daysBetween(l.date, todayStr());
+    if (c.remain > 0) {
+      if ((l.investor || "").trim()) owedInv += c.totalDue;
+      else owedOwn += c.totalDue;
+    }
     grandIntTotal += c.intTotal || 0;
     grandComTotal += c.comTotal || 0;
   });
 
-  setText("#loanOwed", fmtMoney(totalOwed));
+  setText("#loanOwedOwn", fmtMoney(owedOwn));
+  setText("#loanOwedInv", fmtMoney(owedInv));
   setText("#loanTotalInt", fmtMoney(grandIntTotal + grandComTotal));
   setText("#loanCount", S.loans.length);
 
   const groups = groupByBorrower();
-  setText("#loanPeople", groups.length);
 
   // Summary table
   const tbody = $("#borrowerBody");
@@ -680,6 +728,7 @@ function renderLoans() {
       const comPer = loan.interestType === "fixedWeekly" ? "/สป." : "/วัน";
       rateStr += ` · คอม ${fmtMoney(loan.commission)}${comPer}`;
     }
+    const investorStr = (loan.investor || "").trim() ? ` · ทุน: ${esc(loan.investor)}` + (loan.investorRate ? ` (จ่าย ${fmtMoney(loan.investorRate)}${loan.interestType === "fixedWeekly" ? "/สป." : "/วัน"})` : "") : "";
 
     // Interest + Commission summary badge
     const hasInterest = (c.intRcv > 0 || c.interest > 0 || c.intTotal > 0);
@@ -700,16 +749,18 @@ function renderLoans() {
     }
 
     // Daily tracking (fixed บาท/วัน) — เริ่มเก็บวันถัดจากวันที่ให้ยืม
+    const today = todayStr();
     let dailyHtml = "";
     if (!isPaid && loan.interestType === "fixed" && loan.interestFixed) {
       const recs = loan.interestDailyRecords || [];
       const rcvMap = {}; recs.forEach(r => { rcvMap[r.date] = r.received; });
       const startDay = nextDay(loan.date);
-      const days = startDay <= todayStr() ? dateRange(startDay, todayStr()).slice(-14) : [];
+      const days = startDay <= today ? dateRange(startDay, today).slice(-14) : [];
       dailyHtml = `<div class="daily-section"><div class="daily-title">ดอกเบี้ยรายวัน (14 วันล่าสุด)</div><div class="daily-grid">${days.map(d => {
         const done = !!rcvMap[d];
+        const overdue = !done && d < today;
         const label = new Date(d).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.interestFixed)}</span></label>`;
+        return `<label class="day-box ${done ? "done" : ""} ${overdue ? "overdue" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.interestFixed)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -719,11 +770,12 @@ function renderLoans() {
       const cRecs = loan.commissionDailyRecords || [];
       const cMap = {}; cRecs.forEach(r => { cMap[r.date] = r.received; });
       const startDay = nextDay(loan.date);
-      const days = startDay <= todayStr() ? dateRange(startDay, todayStr()).slice(-14) : [];
+      const days = startDay <= today ? dateRange(startDay, today).slice(-14) : [];
       dailyComHtml = `<div class="daily-section com-section"><div class="daily-title">คอมมิสชั่นรายวัน (14 วันล่าสุด)</div><div class="daily-grid">${days.map(d => {
         const done = !!cMap[d];
+        const overdue = !done && d < today;
         const label = new Date(d).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box com-box ${done ? "done" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
+        return `<label class="day-box com-box ${done ? "done" : ""} ${overdue ? "overdue" : ""}" data-lid="${loan.id}" data-d="${d}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -738,9 +790,11 @@ function renderLoans() {
       const weeks = wStart <= wEndStr ? weekStarts(wStart, wEndStr).slice(-10) : [];
       weeklyHtml = `<div class="daily-section"><div class="daily-title">ดอกเบี้ยรายสัปดาห์ (10 สัปดาห์ล่าสุด)</div><div class="daily-grid">${weeks.map((w, i) => {
         const done = !!wMap[w];
+        const wEnd = (() => { const d = new Date(w); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+        const overdue = !done && wEnd < today;
         const wDate = new Date(w);
         const label = wDate.toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box ${done ? "done" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.interestFixedWeekly)}</span></label>`;
+        return `<label class="day-box ${done ? "done" : ""} ${overdue ? "overdue" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="int"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.interestFixedWeekly)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -755,9 +809,11 @@ function renderLoans() {
       const weeks = wStart <= wEndStr ? weekStarts(wStart, wEndStr).slice(-10) : [];
       weeklyComHtml = `<div class="daily-section com-section"><div class="daily-title">คอมมิสชั่นรายสัปดาห์ (10 สัปดาห์ล่าสุด)</div><div class="daily-grid">${weeks.map((w, i) => {
         const done = !!cMap[w];
+        const wEnd = (() => { const d = new Date(w); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+        const overdue = !done && wEnd < today;
         const wDate = new Date(w);
         const label = wDate.toLocaleDateString("th-TH",{day:"numeric",month:"short"});
-        return `<label class="day-box com-box ${done ? "done" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
+        return `<label class="day-box com-box ${done ? "done" : ""} ${overdue ? "overdue" : ""}" data-lid="${loan.id}" data-w="${w}" data-ct="com"><input type="checkbox" ${done ? "checked" : ""}/><span class="dlabel">สป.${label}</span><span class="damount">${fmtMoney(loan.commission)}</span></label>`;
       }).join("")}</div></div>`;
     }
 
@@ -767,7 +823,7 @@ function renderLoans() {
           <span class="loan-name">${esc(loan.borrowerName)}</span>
           <span class="loan-due">${isPaid ? "✓ ชำระแล้ว" : fmtMoney(c.totalDue) + " บาท"}</span>
         </div>
-        <div class="loan-meta-line">เงินต้น ${fmtMoney(loan.amount)} · ${fmtDate(loan.date)} · ${rateStr}${loan.note ? " · " + esc(loan.note) : ""}</div>
+        <div class="loan-meta-line">เงินต้น ${fmtMoney(loan.amount)} · ${fmtDate(loan.date)} · ${rateStr}${investorStr}${loan.note ? " · " + esc(loan.note) : ""}</div>
         ${intBadge}
         ${dailyHtml}
         ${dailyComHtml}
@@ -789,6 +845,214 @@ function renderLoans() {
       else { isCom ? toggleDayCom(lbl.dataset.lid, lbl.dataset.d) : toggleDayInt(lbl.dataset.lid, lbl.dataset.d); }
     });
   });
+}
+
+// ── Agent Tab ──
+function getInvestorLoans() {
+  return S.loans.filter(l => (l.investor || "").trim() && calcInt(l).remain > 0);
+}
+
+function isTransferConfirmed(loan, dateOrWeek) {
+  return (loan.investorTransfers || []).some(t => t.date === dateOrWeek && t.confirmed);
+}
+
+function confirmInvestorTransfer(loanId, dateOrWeek) {
+  const loan = S.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  loan.investorTransfers = loan.investorTransfers || [];
+  const existing = loan.investorTransfers.find(t => t.date === dateOrWeek);
+  if (existing) { existing.confirmed = !existing.confirmed; }
+  else { loan.investorTransfers.push({ date: dateOrWeek, amount: loan.investorRate || 0, confirmed: true }); }
+  save(); renderAgent();
+}
+
+function renderAgent() {
+  const todayList = $("#agentTodayList");
+  const overdueList = $("#agentOverdueList");
+  const invBody = $("#investorSummaryBody");
+  if (!todayList && !overdueList) return;
+
+  const today = todayStr();
+  const invLoans = getInvestorLoans();
+
+  const todayItems = [];
+  const overdueItems = [];
+  const investorTotals = {};
+
+  invLoans.forEach(loan => {
+    const inv = (loan.investor || "").trim();
+    const rate = Number(loan.investorRate) || 0;
+    if (!inv || rate <= 0) return;
+
+    if (!investorTotals[inv]) investorTotals[inv] = { count: 0, transferred: 0, overdue: 0, total: 0 };
+
+    if (loan.interestType === "fixed") {
+      const intRecs = loan.interestDailyRecords || [];
+      const intMap = {}; intRecs.forEach(r => { intMap[r.date] = r.received; });
+      const startDay = nextDay(loan.date);
+      const allDays = startDay <= today ? dateRange(startDay, today) : [];
+
+      allDays.forEach(d => {
+        const intCollected = !!intMap[d];
+        const transferred = isTransferConfirmed(loan, d);
+        investorTotals[inv].count++;
+        investorTotals[inv].total += rate;
+
+        if (d === today) {
+          todayItems.push({ loan, investor: inv, date: d, amount: rate, intCollected, transferred });
+          if (transferred) investorTotals[inv].transferred += rate;
+          else investorTotals[inv].overdue += rate;
+        } else if (d < today) {
+          if (transferred) {
+            investorTotals[inv].transferred += rate;
+          } else {
+            investorTotals[inv].overdue += rate;
+            overdueItems.push({ loan, investor: inv, date: d, amount: rate, intCollected });
+          }
+        }
+      });
+    } else if (loan.interestType === "fixedWeekly") {
+      const intRecs = loan.interestWeeklyRecords || [];
+      const intMap = {}; intRecs.forEach(r => { intMap[r.weekStart] = r.received; });
+      const startDay = nextDay(loan.date);
+      const endW = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+      const weeks = startDay <= endW ? weekStarts(startDay, endW) : [];
+
+      weeks.forEach(w => {
+        const intCollected = !!intMap[w];
+        const transferred = isTransferConfirmed(loan, w);
+        const wEnd = (() => { const d = new Date(w); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+        const isCurrent = w <= today && wEnd >= today;
+        const isPast = wEnd < today;
+
+        investorTotals[inv].count++;
+        investorTotals[inv].total += rate;
+
+        if (isCurrent) {
+          todayItems.push({ loan, investor: inv, date: w, amount: rate, intCollected, transferred, isWeekly: true });
+          if (transferred) investorTotals[inv].transferred += rate;
+          else investorTotals[inv].overdue += rate;
+        } else if (isPast) {
+          if (transferred) {
+            investorTotals[inv].transferred += rate;
+          } else {
+            investorTotals[inv].overdue += rate;
+            overdueItems.push({ loan, investor: inv, date: w, amount: rate, intCollected, isWeekly: true });
+          }
+        }
+      });
+    }
+  });
+
+  // KPIs
+  let dueToday = 0, paidToday = 0, totalOverdue = 0;
+  todayItems.forEach(i => { dueToday += i.amount; if (i.transferred) paidToday += i.amount; });
+  overdueItems.forEach(i => { totalOverdue += i.amount; });
+  setText("#agentDueToday", fmtMoney(dueToday));
+  setText("#agentPaidToday", fmtMoney(paidToday));
+  setText("#agentOverdue", fmtMoney(totalOverdue));
+
+  // Today's list grouped by investor
+  const todayByInv = {};
+  todayItems.forEach(i => {
+    if (!todayByInv[i.investor]) todayByInv[i.investor] = [];
+    todayByInv[i.investor].push(i);
+  });
+
+  if (todayList) {
+    if (todayItems.length === 0) {
+      todayList.innerHTML = '<div class="empty-state"><p>ไม่มีรายการวันนี้</p></div>';
+    } else {
+      todayList.innerHTML = Object.entries(todayByInv).map(([inv, items]) => {
+        const invTotal = items.reduce((s, i) => s + i.amount, 0);
+        const rows = items.map(i => {
+          const dateLabel = i.isWeekly
+            ? `สป. ${new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"})}`
+            : new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
+          const statusCls = i.transferred ? "confirmed" : (i.intCollected ? "pending" : "not-collected");
+          const statusText = i.transferred ? "✓ โอนแล้ว" : (i.intCollected ? "รอโอน" : "ยังไม่เก็บดอก");
+          return `<div class="agent-row ${statusCls}">
+            <span class="agent-borrower">${esc(i.loan.borrowerName)}</span>
+            <span class="agent-date">${dateLabel}</span>
+            <span class="agent-amount">${fmtMoney(i.amount)}</span>
+            <span class="agent-status">${statusText}</span>
+            <button class="btn btn-sm ${i.transferred ? "btn-ghost" : "btn-green"} agent-confirm-btn" data-lid="${i.loan.id}" data-d="${i.date}">${i.transferred ? "ยกเลิก" : "ยืนยันโอน"}</button>
+          </div>`;
+        }).join("");
+        return `<div class="agent-group">
+          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total">รวม ${fmtMoney(invTotal)}</span></div>
+          ${rows}
+        </div>`;
+      }).join("");
+      todayList.querySelectorAll(".agent-confirm-btn").forEach(b => {
+        b.addEventListener("click", () => confirmInvestorTransfer(b.dataset.lid, b.dataset.d));
+      });
+    }
+  }
+
+  // Overdue list grouped by investor
+  const overdueByInv = {};
+  overdueItems.forEach(i => {
+    if (!overdueByInv[i.investor]) overdueByInv[i.investor] = [];
+    overdueByInv[i.investor].push(i);
+  });
+
+  if (overdueList) {
+    if (overdueItems.length === 0) {
+      overdueList.innerHTML = '<div class="empty-state"><p>ไม่มีรายการค้างโอน</p></div>';
+    } else {
+      overdueList.innerHTML = Object.entries(overdueByInv).map(([inv, items]) => {
+        const byLoan = {};
+        items.forEach(i => {
+          if (!byLoan[i.loan.id]) byLoan[i.loan.id] = { loan: i.loan, periods: [], total: 0 };
+          byLoan[i.loan.id].periods.push(i);
+          byLoan[i.loan.id].total += i.amount;
+        });
+        const invTotal = items.reduce((s, i) => s + i.amount, 0);
+        const loanRows = Object.values(byLoan).map(bl => {
+          const periodDetails = bl.periods.map(p => {
+            const dateLabel = p.isWeekly
+              ? `สป. ${new Date(p.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"})}`
+              : new Date(p.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
+            return `<div class="agent-row overdue-row">
+              <span class="agent-date">${dateLabel}</span>
+              <span class="agent-amount">${fmtMoney(p.amount)}</span>
+              <span class="agent-status">${p.intCollected ? "เก็บดอกแล้ว" : "ยังไม่เก็บดอก"}</span>
+              <button class="btn btn-sm btn-amber agent-confirm-btn" data-lid="${p.loan.id}" data-d="${p.date}">ยืนยันโอน</button>
+            </div>`;
+          }).join("");
+          return `<div class="agent-loan-block">
+            <div class="agent-loan-info">ผู้ยืม: <strong>${esc(bl.loan.borrowerName)}</strong> · ค้าง ${bl.periods.length} งวด · รวม ${fmtMoney(bl.total)}</div>
+            ${periodDetails}
+          </div>`;
+        }).join("");
+        return `<div class="agent-group overdue-group">
+          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total overdue-total">ค้างโอน ${fmtMoney(invTotal)}</span></div>
+          ${loanRows}
+        </div>`;
+      }).join("");
+      overdueList.querySelectorAll(".agent-confirm-btn").forEach(b => {
+        b.addEventListener("click", () => { confirmInvestorTransfer(b.dataset.lid, b.dataset.d); });
+      });
+    }
+  }
+
+  // Investor summary table
+  if (invBody) {
+    const entries = Object.entries(investorTotals).sort((a,b) => b[1].total - a[1].total);
+    if (entries.length === 0) {
+      invBody.innerHTML = '<tr><td colspan="5" class="empty-cell">ไม่มีรายการ Investor</td></tr>';
+    } else {
+      invBody.innerHTML = entries.map(([name, v]) => `
+        <tr>
+          <td class="name-cell">${esc(name)}</td>
+          <td>${v.count}</td>
+          <td class="int-cell">${fmtMoney(v.transferred)}</td>
+          <td style="color:var(--red);font-family:var(--mono);font-weight:600">${fmtMoney(v.overdue)}</td>
+          <td class="total-cell">${fmtMoney(v.total)}</td>
+        </tr>`).join("");
+    }
+  }
 }
 
 // ── Generate PWA icons from canvas ──
@@ -862,7 +1126,7 @@ function importData(file) {
       S.loans = data.loans || [];
       S.openBal = Number(data.openingBalance) || 0;
       save();
-      renderLedger(); renderLoans(); updateCharts();
+      renderLedger(); renderLoans(); renderAgent(); updateCharts();
       const ob = $("#openBal"); if (ob) ob.value = S.openBal || "";
       toast("Import สำเร็จ");
     } catch (err) {
@@ -901,7 +1165,7 @@ function setupDataActions() {
 
 // ── Boot ──
 function init() {
-  load(); setupNav(); setupOpenBal(); setupTxForm(); setupLoanForm(); setupFilters(); setupDataActions(); initCharts(); renderLedger(); renderLoans(); updateCharts();
+  load(); setupNav(); setupOpenBal(); setupTxForm(); setupLoanForm(); setupFilters(); setupDataActions(); initCharts(); renderLedger(); renderLoans(); renderAgent(); updateCharts();
   generateIcons();
 }
 init();
