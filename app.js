@@ -944,6 +944,62 @@ function autoCollectAndTransfer(loanId, dateOrWeek, isWeekly) {
   toast(`โอนแล้ว ${fmtMoney(rate)}`);
 }
 
+function transferInvestorToday(investorName) {
+  const today = todayStr();
+  const loans = getInvestorLoans().filter(l => (l.investor || "").trim() === investorName);
+  let totalTransferred = 0;
+
+  const markTransferred = (loan, dateKey, isWeekly) => {
+    if (isWeekly) {
+      loan.interestWeeklyRecords = loan.interestWeeklyRecords || [];
+      const rec = loan.interestWeeklyRecords.find(r => r.weekStart === dateKey);
+      if (rec) rec.received = true;
+      else loan.interestWeeklyRecords.push({ weekStart: dateKey, received: true });
+    } else {
+      loan.interestDailyRecords = loan.interestDailyRecords || [];
+      const rec = loan.interestDailyRecords.find(r => r.date === dateKey);
+      if (rec) rec.received = true;
+      else loan.interestDailyRecords.push({ date: dateKey, received: true });
+    }
+    loan.investorTransfers = loan.investorTransfers || [];
+    const ex = loan.investorTransfers.find(t => t.date === dateKey);
+    if (ex) ex.confirmed = true;
+    else loan.investorTransfers.push({ date: dateKey, confirmed: true });
+    totalTransferred += calcInvestorRate(loan);
+  };
+
+  loans.forEach(loan => {
+    if (loan.interestType === "fixed") {
+      const startDay = nextDay(loan.date);
+      const allDays = startDay <= today ? dateRange(startDay, today) : [];
+      allDays.forEach(d => {
+        const collected = (loan.interestDailyRecords || []).some(r => r.date === d && r.received);
+        const transferred = collected && isTransferred(loan, d);
+        if (d === today || (d < today && collected && !transferred)) {
+          markTransferred(loan, d, false);
+        }
+      });
+    } else if (loan.interestType === "fixedWeekly") {
+      const startDay = nextDay(loan.date);
+      const endW = (() => { const d = new Date(); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+      const weeks = startDay <= endW ? weekStarts(startDay, endW) : [];
+      weeks.forEach(w => {
+        const wEnd = (() => { const d = new Date(w); d.setDate(d.getDate() + 6); return localDateStr(d); })();
+        const isCur = w <= today && wEnd >= today;
+        const isPast = wEnd < today;
+        const collected = (loan.interestWeeklyRecords || []).some(r => r.weekStart === w && r.received);
+        const transferred = collected && isTransferred(loan, w);
+        if (isCur || (isPast && collected && !transferred)) {
+          markTransferred(loan, w, true);
+        }
+      });
+    }
+  });
+
+  save(); renderLoans(); renderAgent(); updateCharts();
+  toast(`โอนให้ ${investorName} แล้ว — ${fmtMoney(totalTransferred)}`);
+}
+
 function renderAgent() {
  try {
   const todayList = $("#agentTodayList");
@@ -1041,45 +1097,47 @@ function renderAgent() {
     } else {
       const groupsHtml = Object.entries(todayByInv).map(([inv, items]) => {
         const countable = items.filter(i => i.isOverdue ? i.collected : true);
+        const invIntTotal = countable.reduce((s, i) => s + i.intAmt, 0);
         const invComTotal = countable.reduce((s, i) => s + i.com, 0);
         const invTransTotal = countable.reduce((s, i) => s + i.rate, 0);
+        const allTransferred = items.every(i => i.transferred);
+
         const rows = items.map(i => {
           const dateLabel = i.isWeekly
             ? `สป. ${new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"})}`
             : new Date(i.date).toLocaleDateString("th-TH",{day:"numeric",month:"short"});
           const overdueTag = i.isOverdue ? `<span class="agent-overdue-tag">ค้างชำระ</span>` : "";
-          const actionHtml = i.transferred
-            ? `<span class="agent-status confirmed">✓ โอนแล้ว</span>`
-            : `<button class="btn btn-sm btn-amber agent-transfer-btn" data-lid="${i.loan.id}" data-d="${i.date}" data-weekly="${!!i.isWeekly}">โอน</button>`;
-          return `<div class="agent-row ${i.transferred ? "transferred" : "pending"}">
+          return `<div class="agent-row ${allTransferred ? "transferred" : "pending"}">
             <span class="agent-borrower">${esc(i.loan.borrowerName)}${overdueTag}</span>
             <span class="agent-date">${dateLabel}</span>
             <span class="agent-amount">ดอก ${fmtMoney(i.intAmt)}</span>
             <span class="agent-detail">คอม ${fmtMoney(i.com)} · โอน ${fmtMoney(i.rate)}</span>
-            ${actionHtml}
           </div>`;
         }).join("");
-        return `<div class="agent-group">
-          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total">คอม ${fmtMoney(invComTotal)} · โอน ${fmtMoney(invTransTotal)}</span></div>
+
+        const actionHtml = allTransferred
+          ? `<div class="agent-group-action transferred"><span class="agent-status confirmed">✓ โอนแล้ว ${fmtMoney(invTransTotal)}</span></div>`
+          : `<div class="agent-group-action"><button class="btn btn-amber agent-transfer-inv-btn" data-inv="${esc(inv)}">โอน ${fmtMoney(invTransTotal)}</button></div>`;
+
+        return `<div class="agent-group ${allTransferred ? "locked" : ""}">
+          <div class="agent-group-head"><span class="agent-inv-name">${esc(inv)}</span><span class="agent-inv-total">ดอก ${fmtMoney(invIntTotal)} · คอม ${fmtMoney(invComTotal)}</span></div>
           ${rows}
+          ${actionHtml}
         </div>`;
       }).join("");
 
-      const todayItemCount = todaySection.length;
-      const collectedOverdue = todaySection.filter(i => i.isOverdue && i.collected).length;
       const totalSummary = `<div class="agent-today-total">
-        <div class="agent-total-row"><span>รายการทั้งหมด</span><strong>${todayItemCount} รายการ${collectedOverdue > 0 ? ` (ค้าง ${collectedOverdue})` : ""}</strong></div>
         <div class="agent-total-row"><span>ดอกเบี้ยที่เก็บได้</span><strong>${fmtMoney(intToday)}</strong></div>
         <div class="agent-total-row"><span>คอมฯ นายหน้า</span><strong class="com">${fmtMoney(comToday)}</strong></div>
-        <div class="agent-total-row"><span>ต้องโอน Investor</span><strong class="transfer">${fmtMoney(transferToday)}</strong></div>
+        <div class="agent-total-row"><span>ต้องโอน Investor รวม</span><strong class="transfer">${fmtMoney(transferToday)}</strong></div>
       </div>`;
 
       todayList.innerHTML = groupsHtml + totalSummary;
-      todayList.querySelectorAll(".agent-transfer-btn").forEach(b => {
+      todayList.querySelectorAll(".agent-transfer-inv-btn").forEach(b => {
         b.addEventListener("click", (e) => {
           e.preventDefault(); e.stopPropagation();
           b.disabled = true;
-          autoCollectAndTransfer(b.dataset.lid, b.dataset.d, b.dataset.weekly === "true");
+          transferInvestorToday(b.dataset.inv);
         });
       });
     }

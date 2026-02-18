@@ -816,7 +816,7 @@ body {
 
 .agent-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: .5rem;
   align-items: center;
   padding: .5rem .85rem;
@@ -824,6 +824,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .agent-row:last-child { border-bottom: none; }
+.overdue-row { grid-template-columns: 1fr auto auto auto auto; }
 .agent-borrower { font-weight: 600; color: var(--t1); }
 .agent-date { color: var(--t3); font-size: .76rem; }
 .agent-amount { font-family: var(--mono); font-weight: 600; color: var(--t1); }
@@ -834,6 +835,37 @@ body {
 .agent-row.confirmed .agent-status { color: var(--amber); background: var(--amber-soft); }
 .agent-row.pending .agent-status { color: var(--red); background: var(--red-soft); }
 .agent-row.transferred { background: rgba(34,197,94,.03); }
+
+.agent-group-action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: .6rem .85rem;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+}
+.agent-group-action .btn {
+  font-size: .9rem;
+  font-weight: 700;
+  padding: .5rem 1.5rem;
+  font-family: var(--mono);
+}
+.agent-group-action.transferred {
+  justify-content: center;
+  background: rgba(34,197,94,.06);
+}
+.agent-group-action .agent-status.confirmed {
+  font-size: .88rem;
+  padding: .35rem .75rem;
+}
+.agent-group.locked {
+  opacity: .75;
+  pointer-events: none;
+}
+.agent-group.locked .agent-group-action {
+  pointer-events: auto;
+  opacity: 1;
+}
 
 .agent-overdue-tag {
   display: inline-block;
