@@ -648,7 +648,8 @@ function renderLoans() {
   // Cards
   if (S.loans.length === 0) { list.innerHTML = '<div class="empty-state"><p>ยังไม่มีรายการเงินยืม</p></div>'; return; }
 
-  list.innerHTML = S.loans.map(loan => {
+  const sortedLoans = [...S.loans].sort((a, b) => new Date(b.date) - new Date(a.date) || b.createdAt - a.createdAt);
+  list.innerHTML = sortedLoans.map(loan => {
     const c = calcInt(loan);
     const isPaid = c.remain <= 0;
     let rateStr = "ไม่มีดอกเบี้ย";
